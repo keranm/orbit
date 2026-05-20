@@ -5,6 +5,21 @@ import SwiftUI
 final class AppState {
     var route: AppRoute = .newChat
 
+    /// Pro mode toggle — persisted across launches.
+    /// Uses UserDefaults directly to avoid @AppStorage / @Observable macro conflicts.
+    var isProMode: Bool {
+        get { UserDefaults.standard.bool(forKey: "orbitProMode") }
+        set { UserDefaults.standard.set(newValue, forKey: "orbitProMode") }
+    }
+
+    func toggleProMode() {
+        isProMode.toggle()
+        // If toggling off while on a Pro screen, reset to the default V1 route.
+        if !isProMode, case .proScreen = route {
+            route = .newChat
+        }
+    }
+
     /// Nova companion state — updated by features in response to activity and runtime state.
     var novaState: NovaState = .idle
 

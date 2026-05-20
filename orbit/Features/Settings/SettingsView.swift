@@ -7,6 +7,7 @@ struct SettingsView: View {
     enum SettingsSection: String, CaseIterable, Identifiable {
         case general  = "General"
         case models   = "Models"
+        case pro      = "Pro"
         case privacy  = "Privacy"
         case mesh     = "Mesh"
         case reset    = "Reset"
@@ -18,6 +19,7 @@ struct SettingsView: View {
             switch self {
             case .general:  return "gearshape"
             case .models:   return "square.stack"
+            case .pro:      return "wand.and.stars"
             case .privacy:  return "lock.shield"
             case .mesh:     return "network"
             case .reset:    return "arrow.counterclockwise"
@@ -116,6 +118,7 @@ struct SettingsView: View {
                 switch selectedSection {
                 case .general:  GeneralSection()
                 case .models:   ModelsSection()
+                case .pro:      ProSection()
                 case .privacy:  PrivacySection()
                 case .mesh:     MeshSection()
                 case .reset:    ResetSection()

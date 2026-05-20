@@ -43,6 +43,8 @@ final class AppRouteTests: XCTestCase {
             switch route {
             case .newChat, .chat, .prompts, .models, .settings:
                 count += 1
+            case .proScreen:
+                break
             }
         }
         XCTAssertEqual(count, 5)

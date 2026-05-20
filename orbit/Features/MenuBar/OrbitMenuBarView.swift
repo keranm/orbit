@@ -29,6 +29,19 @@ struct OrbitMenuBarView: View {
 
             Divider()
 
+            Button {
+                appState.toggleProMode()
+            } label: {
+                HStack {
+                    Text("Pro Mode")
+                    Spacer()
+                    if appState.isProMode {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             runtimeStatusItem
 
             Divider()

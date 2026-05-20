@@ -56,11 +56,13 @@ struct MainWindowView: View {
         .navigationSplitViewStyle(.balanced)
     }
 
-    /// Nova is an emotional presence for chat. It adds noise on utility screens.
+    /// Nova is an emotional presence for chat and absent from Pro screens.
+    /// It adds noise on utility screens.
     private var novaVisible: Bool {
         switch appState.route {
         case .newChat, .chat: return true
         case .prompts, .models, .settings: return false
+        case .proScreen:     return false
         }
     }
 
@@ -89,6 +91,8 @@ struct MainWindowView: View {
             ModelsView()
         case .settings:
             SettingsView()
+        case .proScreen(let proRoute):
+            ProRouteView(route: proRoute)
         }
     }
 }

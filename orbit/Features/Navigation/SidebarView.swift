@@ -117,9 +117,26 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: OSpacing.xxs) {
             navItem(.prompts,  icon: "sparkles",     label: "Prompts")
             navItem(.models,   icon: "square.stack", label: "Models")
+
+            if appState.isProMode {
+                sectionHeader("PRO")
+                    .padding(.top, OSpacing.sm)
+                proNavItem(.dashboard, icon: "chart.bar.fill",      label: "Dashboard")
+                proNavItem(.coding,    icon: "chevron.left.forwardslash.chevron.right", label: "Code")
+                proNavItem(.playground, icon: "flask.fill",          label: "Playground")
+                proNavItem(.prompts,   icon: "sparkles.rectangle.stack", label: "Prompts")
+            }
+
             navItem(.settings, icon: "gearshape",    label: "Settings")
         }
         .padding(.horizontal, OSpacing.xs)
+    }
+
+    // MARK: - Pro nav helper
+
+    private func proNavItem(_ proRoute: ProRoute, icon: String, label: String) -> some View {
+        let route = AppRoute.proScreen(proRoute)
+        return navItem(route, icon: icon, label: label)
     }
 
     // MARK: - Runtime status footer

@@ -59,9 +59,10 @@ struct OrbitApp: App {
                     let context = ModelContext(Self.modelContainer)
                     NovaOverlayViewController.shared.configure(modelContext: context)
 
-                    // Start the global hotkey (skip in UI test environments)
+                    // Start global hotkeys (skip in UI test environments)
                     if !CommandLine.arguments.contains("--mock-runtime") {
                         MiniChatHotkeyManager.shared.start()
+                        ProModeHotkeyManager.shared.start()
                     }
                 }
         }

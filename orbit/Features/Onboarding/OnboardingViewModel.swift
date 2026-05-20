@@ -66,13 +66,14 @@ final class OnboardingViewModel {
     // MARK: - Experience selection
 
     enum ExperienceTier: CaseIterable, Equatable {
-        case fast, balanced, advanced
+        case fast, balanced, advanced, pro
 
         var title: String {
             switch self {
             case .fast:     return "Fast local chat"
             case .balanced: return "Balanced accuracy"
             case .advanced: return "Advanced reasoning"
+            case .pro:      return "Pro — just the toggle"
             }
         }
 
@@ -81,6 +82,7 @@ final class OnboardingViewModel {
             case .fast:     return "Great for quick responses and everyday tasks"
             case .balanced: return "Thoughtful answers for complex questions"
             case .advanced: return "Deep analysis and multi-step reasoning"
+            case .pro:      return "Enable Pro mode. Pick a model later."
             }
         }
 
@@ -89,6 +91,7 @@ final class OnboardingViewModel {
             case .fast:     return "~397 MB"
             case .balanced: return "~5 GB"
             case .advanced: return "~20 GB"
+            case .pro:      return "0 MB"
             }
         }
 
@@ -97,6 +100,7 @@ final class OnboardingViewModel {
             case .fast:     return "Qwen3-0.6B-Q4_K_M"
             case .balanced: return "Qwen3-8B-Q4_K_M"
             case .advanced: return "Qwen3-32B"
+            case .pro:      return ""
             }
         }
 
@@ -108,6 +112,7 @@ final class OnboardingViewModel {
             case .fast:     return "unsloth/Qwen3-0.6B-GGUF@main:Q4_K_M"
             case .balanced: return "unsloth/Qwen3-8B-GGUF@main:Q4_K_M"
             case .advanced: return "unsloth/Qwen3-32B-GGUF@main:Q4_K_M"
+            case .pro:      return ""
             }
         }
 
@@ -116,6 +121,7 @@ final class OnboardingViewModel {
             case .fast:     return "Qwen 3 · 0.6B"
             case .balanced: return "Qwen 3 · 8B"
             case .advanced: return "Qwen 3 · 32B"
+            case .pro:      return "Pro Mode"
             }
         }
 
@@ -127,6 +133,7 @@ final class OnboardingViewModel {
             case .fast:     return "bolt.fill"
             case .balanced: return "target"
             case .advanced: return "brain"
+            case .pro:      return "wand.and.stars"
             }
         }
     }
