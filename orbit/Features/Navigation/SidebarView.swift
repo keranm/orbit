@@ -1,142 +1,48 @@
 import SwiftUI
-import SwiftData
 
 struct SidebarView: View {
     @Environment(AppState.self) private var appState
-    @Query(sort: \Chat.updatedAt, order: .reverse) private var chats: [Chat]
 
-    // Hover tracking — one state per item kind avoids per-row @State structs.
+    // Hover tracking avoids per-row @State structs.
     @State private var hoveredRoute: AppRoute?
-    @State private var hoveredChatID: UUID?
-    @State private var showAllChats = false
-
-    private let chatDisplayLimit = 20
 
     // Icon column width shared by nav items and the status footer dot.
     private let iconWidth: CGFloat = 18
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            navSection
+            navList
                 .padding(.top, OSpacing.xl)   // clears floating traffic lights
 
             Spacer(minLength: 0)
-
-            bottomNav
-                .padding(.bottom, OSpacing.sm)
 
             Divider()
                 .padding(.horizontal, OSpacing.sm)
 
             meshStatusFooter
-                .padding(.horizontal, OSpacing.xs)   // same outer indent as navSection
+                .padding(.horizontal, OSpacing.xs)
                 .padding(.vertical, OSpacing.sm)
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - Primary nav section
+    // MARK: - Nav list (flat, no section headers)
 
-    private var navSection: some View {
+    private var navList: some View {
         VStack(alignment: .leading, spacing: OSpacing.xxs) {
             navItem(.newChat, icon: "square.and.pencil", label: "New Chat")
 
-            sectionHeader("Chats")
-
-            if chats.isEmpty {
-                Text("No conversations yet")
-                    .font(.oCaption)
-                    .foregroundStyle(Color.oTextTertiary)
-                    .padding(.leading, OSpacing.sm + iconWidth + OSpacing.sm)
-                    .padding(.vertical, OSpacing.xs)
-            } else {
-                let visible = showAllChats ? chats : Array(chats.prefix(chatDisplayLimit))
-                ForEach(visible) { chat in
-                    chatRow(chat)
-                }
-                if !showAllChats && chats.count > chatDisplayLimit {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { showAllChats = true }
-                    } label: {
-                        Text("Show \(chats.count - chatDisplayLimit) more")
-                            .font(.oMicro)
-                            .foregroundStyle(Color.oTextTertiary)
-                            .padding(.leading, OSpacing.sm + iconWidth + OSpacing.sm)
-                            .padding(.vertical, OSpacing.xs)
-                    }
-                    .buttonStyle(.plain)
-                }
+            if appState.isProMode {
+                navItem(.dashboard,  icon: "chart.bar.fill",      label: "Dashboard")
+                navItem(.coding,     icon: "chevron.left.forwardslash.chevron.right", label: "Code")
+                navItem(.playground, icon: "flask.fill",          label: "Playground")
             }
-        }
-        .padding(.horizontal, OSpacing.xs)
-    }
 
-    private func chatRow(_ chat: Chat) -> some View {
-        let isSelected: Bool = {
-            if case .chat(let id) = appState.route { return id == chat.id }
-            return false
-        }()
-        let isHovered = hoveredChatID == chat.id
-
-        return Button {
-            appState.route = .chat(id: chat.id)
-        } label: {
-            HStack(spacing: OSpacing.sm) {
-                Image(systemName: "bubble.left")
-                    .font(.system(size: 12, weight: .regular))
-                    .frame(width: iconWidth, alignment: .center)
-                    .foregroundStyle(isSelected ? Color.oAccent : Color.oTextTertiary)
-
-                Text(chat.title)
-                    .font(.oBody)
-                    .foregroundStyle(isSelected ? Color.oAccent : Color.oTextPrimary)
-                    .lineLimit(1)
-
-                Spacer()
-            }
-            .padding(.horizontal, OSpacing.sm)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: ORadius.md)
-                    .fill(
-                        isSelected ? Color.oSidebarSelected :
-                        isHovered  ? Color.oSurfaceSecondary : Color.clear
-                    )
-            )
-            .contentShape(RoundedRectangle(cornerRadius: ORadius.md))
-        }
-        .buttonStyle(.plain)
-        .onHover { over in hoveredChatID = over ? chat.id : nil }
-        .accessibilityLabel(chat.title)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-
-    // MARK: - Bottom nav
-
-    private var bottomNav: some View {
-        VStack(alignment: .leading, spacing: OSpacing.xxs) {
             navItem(.prompts,  icon: "sparkles",     label: "Prompts")
             navItem(.models,   icon: "square.stack", label: "Models")
-
-            if appState.isProMode {
-                sectionHeader("PRO")
-                    .padding(.top, OSpacing.sm)
-                proNavItem(.dashboard, icon: "chart.bar.fill",      label: "Dashboard")
-                proNavItem(.coding,    icon: "chevron.left.forwardslash.chevron.right", label: "Code")
-                proNavItem(.playground, icon: "flask.fill",          label: "Playground")
-                proNavItem(.prompts,   icon: "sparkles.rectangle.stack", label: "Prompts")
-            }
-
             navItem(.settings, icon: "gearshape",    label: "Settings")
         }
         .padding(.horizontal, OSpacing.xs)
-    }
-
-    // MARK: - Pro nav helper
-
-    private func proNavItem(_ proRoute: ProRoute, icon: String, label: String) -> some View {
-        let route = AppRoute.proScreen(proRoute)
-        return navItem(route, icon: icon, label: label)
     }
 
     // MARK: - Runtime status footer
@@ -226,15 +132,6 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .onHover { over in hoveredRoute = over ? route : nil }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.oMicro)
-            .foregroundStyle(Color.oTextTertiary)
-            .padding(.leading, OSpacing.sm + iconWidth + OSpacing.sm)
-            .padding(.top, OSpacing.sm)
-            .padding(.bottom, OSpacing.xxs)
     }
 
     // MARK: - Status copy

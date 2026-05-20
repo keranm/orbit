@@ -28,43 +28,65 @@ final class AppRouteTests: XCTestCase {
         XCTAssertNotEqual(AppRoute.chat(id: UUID()), AppRoute.chat(id: UUID()))
     }
 
-    func test_routes_are_distinct() {
+    func test_v1_routes_are_distinct() {
         let id = UUID()
         let routes: [AppRoute] = [.newChat, .chat(id: id), .prompts, .models, .settings]
         let set = Set(routes)
-        XCTAssertEqual(set.count, 5, "V1 must have exactly 5 distinct route cases")
+        XCTAssertEqual(set.count, 5)
     }
 
-    func test_all_v1_routes_present() {
-        // Exhaustive switch — fails to compile if any case is missing.
-        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .prompts, .models, .settings]
+    func test_pro_routes_are_distinct_from_v1() {
+        let routes: [AppRoute] = [.dashboard, .coding, .playground]
+        let set = Set(routes)
+        XCTAssertEqual(set.count, 3)
+    }
+
+    func test_all_v1_cases_exhaustive() {
         var count = 0
+        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .prompts, .models, .settings]
         for route in routes {
             switch route {
             case .newChat, .chat, .prompts, .models, .settings:
                 count += 1
-            case .proScreen:
+            case .dashboard, .coding, .playground:
                 break
             }
         }
         XCTAssertEqual(count, 5)
     }
 
-    func test_no_playground_route() {
-        // Playground is explicitly excluded from V1 scope.
-        let names = [AppRoute.newChat, .prompts, .models, .settings]
-            .map { String(describing: $0) }
-        XCTAssertFalse(names.contains(where: { $0.contains("playground") }))
+    func test_all_pro_cases_exhaustive() {
+        var count = 0
+        let routes: [AppRoute] = [.dashboard, .coding, .playground]
+        for route in routes {
+            switch route {
+            case .newChat, .chat, .prompts, .models, .settings:
+                break
+            case .dashboard, .coding, .playground:
+                count += 1
+            }
+        }
+        XCTAssertEqual(count, 3)
     }
 
     func test_route_usable_as_dictionary_key() {
         var map: [AppRoute: String] = [:]
-        map[.newChat]  = "newChat"
-        map[.prompts]  = "prompts"
-        map[.models]   = "models"
-        map[.settings] = "settings"
+        map[.newChat]    = "newChat"
+        map[.prompts]    = "prompts"
+        map[.models]     = "models"
+        map[.settings]   = "settings"
+        map[.dashboard]  = "dashboard"
+        map[.coding]     = "coding"
+        map[.playground] = "playground"
         let id = UUID()
         map[.chat(id: id)] = "chat"
-        XCTAssertEqual(map.count, 5)
+        XCTAssertEqual(map.count, 8)
+    }
+
+    func test_playground_is_pro_only_route() {
+        // Playground should not appear in V1-only lists
+        let v1Routes: [AppRoute] = [.newChat, .prompts, .models, .settings]
+        let names = v1Routes.map { String(describing: $0) }
+        XCTAssertFalse(names.contains(where: { $0.contains("playground") }))
     }
 }

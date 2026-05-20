@@ -14,9 +14,14 @@ final class AppState {
 
     func toggleProMode() {
         isProMode.toggle()
-        // If toggling off while on a Pro screen, reset to the default V1 route.
-        if !isProMode, case .proScreen = route {
-            route = .newChat
+        // If toggling off while on a Pro-only route, reset to the default V1 route.
+        if !isProMode {
+            switch route {
+            case .dashboard, .coding, .playground:
+                route = .newChat
+            default:
+                break
+            }
         }
     }
 

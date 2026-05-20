@@ -56,13 +56,12 @@ struct MainWindowView: View {
         .navigationSplitViewStyle(.balanced)
     }
 
-    /// Nova is an emotional presence for chat and absent from Pro screens.
-    /// It adds noise on utility screens.
+    /// Nova is an emotional presence for chat and absent from all other screens.
     private var novaVisible: Bool {
         switch appState.route {
         case .newChat, .chat: return true
         case .prompts, .models, .settings: return false
-        case .proScreen:     return false
+        case .dashboard, .coding, .playground: return false
         }
     }
 
@@ -91,9 +90,38 @@ struct MainWindowView: View {
             ModelsView()
         case .settings:
             SettingsView()
-        case .proScreen(let proRoute):
-            ProRouteView(route: proRoute)
+        case .dashboard:
+            ProPlaceholderView(title: "Dashboard", subtitle: "Mesh inference metrics and system monitoring.")
+        case .coding:
+            ProPlaceholderView(title: "Code", subtitle: "AI-augmented code editor.")
+        case .playground:
+            ProPlaceholderView(title: "Playground", subtitle: "Model testing and parameter experimentation.")
         }
+    }
+}
+
+// MARK: - Placeholder
+
+private struct ProPlaceholderView: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(spacing: OSpacing.sm) {
+            Image(systemName: "hammer.fill")
+                .font(.system(size: 32))
+                .foregroundStyle(Color.oTextTertiary)
+
+            Text(title)
+                .font(.oTitle2)
+                .foregroundStyle(Color.oTextPrimary)
+
+            Text(subtitle)
+                .font(.oBody)
+                .foregroundStyle(Color.oTextTertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.oBackground)
     }
 }
 
