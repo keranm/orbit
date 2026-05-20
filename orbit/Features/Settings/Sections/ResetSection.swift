@@ -202,7 +202,7 @@ private struct RemoveMeshLLMSheet: View {
     private enum Phase {
         case confirm
         case removing
-        case done(MeshLLMUninstaller.UninstallResult)
+        case done(ModelService.UninstallResult)
         case failed(String)
 
         var isConfirm: Bool { if case .confirm = self { return true }; return false }
@@ -387,7 +387,7 @@ private struct RemoveMeshLLMSheet: View {
 
     // MARK: - Done phase
 
-    private func doneContent(_ result: MeshLLMUninstaller.UninstallResult) -> some View {
+    private func doneContent(_ result: ModelService.UninstallResult) -> some View {
         VStack(alignment: .leading, spacing: OSpacing.lg) {
             HStack(spacing: OSpacing.md) {
                 Image(systemName: "checkmark.circle.fill")
@@ -521,14 +521,11 @@ private struct RemoveMeshLLMSheet: View {
         let binaryURL = appState.runtimeManager.binaryPath
 
         Task {
-            let uninstaller = MeshLLMUninstaller()
-            let result = await uninstaller.uninstall(
-                runtimeStatus: currentStatus,
-                binaryURL: binaryURL,
+            let result = await ModelService.uninstallAll(
+                binaryPath: binaryURL,
                 rm: appState.runtimeManager
             )
 
-            // Refresh runtime state — after removal, detectInstall will set .notInstalled.
             await appState.runtimeManager.detectInstall()
 
             withAnimation {

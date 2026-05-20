@@ -8,7 +8,7 @@ final class ModelsViewModel {
 
     // MARK: - Model lists
 
-    private(set) var installedModels: [InstalledModelEntry] = []
+    var installedModels: [InstalledModelEntry] = []
     private(set) var recommendedModels: [CatalogModel] = []
     private(set) var selectedModel: InstalledModelEntry?
 
@@ -123,43 +123,10 @@ final class ModelsViewModel {
             defer { downloadTasks[ref] = nil }
 
             // Stop any running runtime before spawning the download CLI.
-            // The mesh-llm binary panics (exit 101) if any mesh-llm process
-            // holds an active Tokio runtime — including one that is still starting.
+            // rm.stop() handles lsof+SIGTERM fallback and port verification.
             let shouldRestart = rm.status == .ready || rm.status == .starting
             if shouldRestart {
                 await rm.stop()
-                // Kill-and-verify loop: keep sending SIGKILL until pgrep confirms
-                // zero mesh-llm processes remain. The download CLI panics (exit 101)
-                // if ANY mesh-llm process holds a live Tokio runtime.
-                for _ in 0..<8 {
-                    await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                        let kill = Process()
-                        kill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-                        kill.arguments = ["-KILL", "-x", "mesh-llm"]
-                        kill.standardOutput = FileHandle.nullDevice
-                        kill.standardError  = FileHandle.nullDevice
-                        kill.terminationHandler = { _ in cont.resume() }
-                        if (try? kill.run()) == nil { cont.resume() }
-                    }
-                    try? await Task.sleep(for: .milliseconds(400))
-                    // pgrep exits 0 if processes found, 1 if none — stop killing when clear
-                    let stillRunning = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-                        let pg = Process()
-                        pg.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-                        pg.arguments = ["-x", "mesh-llm"]
-                        pg.standardOutput = FileHandle.nullDevice
-                        pg.standardError  = FileHandle.nullDevice
-                        pg.terminationHandler = { p in cont.resume(returning: p.terminationStatus == 0) }
-                        if (try? pg.run()) == nil { cont.resume(returning: false) }
-                    }
-                    if !stillRunning { break }
-                }
-                // Final port check
-                var portChecks = 0
-                while await rm.checkLiveness(), portChecks < 10 {
-                    try? await Task.sleep(for: .milliseconds(300))
-                    portChecks += 1
-                }
             }
 
             do {
@@ -198,26 +165,22 @@ final class ModelsViewModel {
 
     func setActiveModel(_ model: InstalledModelEntry, rm: RuntimeManager) async {
         let ref = model.ref ?? model.name
-        do {
-            try rm.ensureModelConfigured(ref)
 
-            switch rm.status {
-            case .notInstalled:
-                // Binary is gone — nothing to start. Config is written for when it returns.
-                break
-            case .starting, .stopping:
-                // Already transitioning — wait for it to settle; don't interrupt.
-                break
-            case .ready:
-                // Runtime is up with a different model — full restart needed.
-                await rm.stop()
-                await rm.start(modelRef: ref)
-            case .offline, .noModelConfigured, .error:
-                // Runtime is idle or had no model. Start fresh with the selected model.
-                await rm.start(modelRef: ref)
-            }
-        } catch {
-            removeError = "Couldn't activate this model. Try again."
+        switch rm.status {
+        case .notInstalled:
+            // Binary is gone — nothing to start.
+            break
+        case .starting, .stopping:
+            // Already transitioning — wait for it to settle; don't interrupt.
+            break
+        case .ready:
+            // Runtime is up — full restart with the new model ref.
+            // rm.start(modelRef:) writes config.toml before launching.
+            await rm.stop()
+            await rm.start(modelRef: ref)
+        case .offline, .noModelConfigured, .error:
+            // Runtime is idle or had no model. Start fresh with the selected model.
+            await rm.start(modelRef: ref)
         }
     }
 
@@ -229,37 +192,11 @@ final class ModelsViewModel {
 
         do {
             try await service.remove(binaryPath: binaryPath, ref: ref)
-            // Clean up the HuggingFace cache directory so the broken-symlink
-            // problem (BUG-002) doesn't cause "No such file" on next serve start.
-            removeHFCacheDirectory(for: ref)
             await loadInstalled(rm: rm)
             if selectedModel?.id == model.id { selectedModel = nil }
         } catch {
             removeError = "Couldn't remove \(model.displayName). Try again."
         }
-    }
-
-    /// Removes the HuggingFace hub cache directory for a model ref.
-    /// Only removes directories that start with "models--" directly inside the hub root.
-    private func removeHFCacheDirectory(for ref: String) {
-        let hubPath = ("~/.cache/huggingface/hub" as NSString).expandingTildeInPath
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: hubPath) else { return }
-
-        // Derive directory name: take org/repo from ref, convert to models--org--repo format
-        let stripped = ref.components(separatedBy: "@").first?
-            .components(separatedBy: ":").first ?? ref
-        let parts = stripped.components(separatedBy: "/").filter { !$0.isEmpty }
-        guard parts.count >= 2 else { return }
-
-        let dirName = "models--\(parts[0])--\(parts[1])"
-            .replacingOccurrences(of: "_", with: "-")
-        guard dirName.hasPrefix("models--") else { return }
-
-        let fullPath = (hubPath as NSString).appendingPathComponent(dirName)
-        guard URL(fileURLWithPath: fullPath).deletingLastPathComponent().path == hubPath else { return }
-
-        try? fm.removeItem(atPath: fullPath)
     }
 
     // MARK: - Selection

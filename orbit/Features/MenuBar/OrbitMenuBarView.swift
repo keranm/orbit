@@ -70,7 +70,7 @@ struct OrbitMenuBarView: View {
 
     private var statusLabel: String {
         switch appState.runtimeStatus {
-        case .ready:             return "Running locally"
+        case .ready:             return "Ready locally"
         case .starting:          return "Starting…"
         case .offline:           return "AI paused"
         case .stopping:          return "Stopping…"
