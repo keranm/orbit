@@ -739,7 +739,12 @@ final class RuntimeManager {
             // Only exit early if OUR process died AND nothing else is serving.
             // If another process is already on port 9337, keep polling.
             if serveProcess?.isRunning == false {
-                if !(await client.checkLiveness()) { return }
+                if !(await client.checkLiveness()) {
+                    let msg = "The runtime process exited unexpectedly during startup."
+                    status = .error(msg)
+                    meshConnectionState = .error(msg)
+                    return
+                }
             }
             try? await Task.sleep(for: .milliseconds(800))
         }
@@ -781,7 +786,12 @@ final class RuntimeManager {
                 await refreshMeshModels()
                 return
             }
-            if serveProcess?.isRunning == false { return }
+            if serveProcess?.isRunning == false {
+                let msg = "The runtime process exited unexpectedly while loading."
+                status = .error(msg)
+                meshConnectionState = .error(msg)
+                return
+            }
             try? await Task.sleep(for: .seconds(2))
         }
 
