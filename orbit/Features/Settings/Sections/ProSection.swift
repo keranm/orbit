@@ -58,41 +58,43 @@ private struct ProModeShortcutView: View {
     @State private var monitor: Any?
     @State private var conflictWarning: String?
 
-    private var displayString: String {
-        ProModeHotkeyManager.shared.configuration.displayString
-    }
+    /// Hold a let reference so the Observation framework can track changes to
+    /// the @Observable ProModeHotkeyManager singleton.
+    private let hotkeyManager = ProModeHotkeyManager.shared
 
     var body: some View {
-        Button {
-            if isRecording { stopRecording() } else { startRecording() }
-        } label: {
-            Text(isRecording ? "Press shortcut…" : displayString)
-                .font(.oBodyMedium)
-                .foregroundStyle(isRecording ? Color.oAccent : Color.oTextSecondary)
-                .padding(.horizontal, OSpacing.sm)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: ORadius.sm)
-                        .fill(isRecording ? Color.oAccentSoft : Color.oSurfaceSecondary)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ORadius.sm)
-                                .stroke(isRecording ? Color.oAccent.opacity(0.5) : Color.oDivider, lineWidth: 1)
-                        )
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isRecording ? "Recording shortcut — press a key combination" : "Current shortcut: \(displayString). Click to change.")
-
-        if let warning = conflictWarning {
-            HStack(spacing: OSpacing.xs) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color.oWarningAmber)
-                Text(warning)
-                    .font(.oMicro)
-                    .foregroundStyle(Color.oWarningAmber)
+        VStack(spacing: OSpacing.xxs) {
+            Button {
+                if isRecording { stopRecording() } else { startRecording() }
+            } label: {
+                Text(isRecording ? "Press shortcut…" : hotkeyManager.configuration.displayString)
+                    .font(.oBodyMedium)
+                    .foregroundStyle(isRecording ? Color.oAccent : Color.oTextSecondary)
+                    .padding(.horizontal, OSpacing.sm)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: ORadius.sm)
+                            .fill(isRecording ? Color.oAccentSoft : Color.oSurfaceSecondary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ORadius.sm)
+                                    .stroke(isRecording ? Color.oAccent.opacity(0.5) : Color.oDivider, lineWidth: 1)
+                            )
+                    )
             }
-            .padding(.top, OSpacing.xxs)
+            .buttonStyle(.plain)
+            .accessibilityLabel(isRecording ? "Recording shortcut — press a key combination" : "Current shortcut: \(hotkeyManager.configuration.displayString). Click to change.")
+
+            if let warning = conflictWarning {
+                HStack(spacing: OSpacing.xs) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.oWarningAmber)
+                    Text(warning)
+                        .font(.oMicro)
+                        .foregroundStyle(Color.oWarningAmber)
+                }
+                .padding(.top, OSpacing.xxs)
+            }
         }
     }
 
@@ -131,7 +133,7 @@ private struct ProModeShortcutView: View {
         } else {
             conflictWarning = nil
         }
-        ProModeHotkeyManager.shared.updateHotkey(newConfig)
+        hotkeyManager.updateHotkey(newConfig)
         stopRecording()
     }
 }

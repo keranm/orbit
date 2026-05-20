@@ -12,7 +12,7 @@ final class ProModeHotkeyManager {
     static let defaultConfig = HotkeyConfiguration(
         keyCode: UInt32(kVK_ANSI_P),
         carbonModifiers: UInt32(cmdKey) | UInt32(shiftKey),
-        keyDisplayName: "⌘⇧P"
+        keyDisplayName: "P"
     )
 
     private static let storageKey = "proModeHotkey"

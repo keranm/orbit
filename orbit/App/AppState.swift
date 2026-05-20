@@ -6,10 +6,10 @@ final class AppState {
     var route: AppRoute = .newChat
 
     /// Pro mode toggle — persisted across launches.
-    /// Uses UserDefaults directly to avoid @AppStorage / @Observable macro conflicts.
-    var isProMode: Bool {
-        get { UserDefaults.standard.bool(forKey: "orbitProMode") }
-        set { UserDefaults.standard.set(newValue, forKey: "orbitProMode") }
+    /// Stored property so @Observable tracks access and mutation.
+    /// didSet persists to UserDefaults on write.
+    var isProMode: Bool = UserDefaults.standard.bool(forKey: "orbitProMode") {
+        didSet { UserDefaults.standard.set(isProMode, forKey: "orbitProMode") }
     }
 
     func toggleProMode() {
