@@ -91,7 +91,7 @@ struct MainWindowView: View {
         case .settings:
             SettingsView()
         case .dashboard:
-            ProPlaceholderView(title: "Dashboard", subtitle: "Mesh inference metrics and system monitoring.")
+            ProPlaceholderView(title: "Mesh Dashboard", subtitle: "Mesh inference metrics and system monitoring.")
         case .coding:
             ProPlaceholderView(title: "Code", subtitle: "AI-augmented code editor.")
         case .playground:

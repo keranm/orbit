@@ -12,7 +12,7 @@ struct ProSection: View {
                     Text("Pro Mode")
                         .font(.oBody)
                         .foregroundStyle(Color.oTextPrimary)
-                    Text("Dashboard, code editor, playground, prompt library, and advanced model controls.")
+                    Text("Mesh Dashboard, code editor, playground, prompt library, and advanced model controls.")
                         .font(.oCaption)
                         .foregroundStyle(Color.oTextTertiary)
                 }

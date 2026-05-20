@@ -33,7 +33,7 @@ struct SidebarView: View {
             navItem(.newChat, icon: "square.and.pencil", label: "New Chat")
 
             if appState.isProMode {
-                navItem(.dashboard,  icon: "chart.bar.fill",      label: "Dashboard")
+                navItem(.dashboard,  icon: "chart.bar.fill",      label: "Mesh Dashboard")
                 navItem(.coding,     icon: "chevron.left.forwardslash.chevron.right", label: "Code")
                 navItem(.playground, icon: "flask.fill",          label: "Playground")
             }
