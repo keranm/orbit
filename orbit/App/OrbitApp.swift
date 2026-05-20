@@ -14,7 +14,7 @@ struct OrbitApp: App {
     /// and the Mini-Chat overlay (which writes chats back into SwiftData).
     static let modelContainer: ModelContainer = {
         do {
-            return try ModelContainer(for: Chat.self, Message.self)
+            return try ModelContainer(for: Chat.self, Message.self, PromptTemplate.self, PromptVariable.self, PromptVersion.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }

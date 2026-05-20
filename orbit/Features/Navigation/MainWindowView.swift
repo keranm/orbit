@@ -85,7 +85,12 @@ struct MainWindowView: View {
         case .chat(let id):
             ChatViewLoader(chatID: id)
         case .prompts:
-            PromptsView()
+            if appState.isProMode {
+                let service = PromptService(container: OrbitApp.modelContainer)
+                PromptsLibraryView(service: service)
+            } else {
+                PromptsView()
+            }
         case .models:
             ModelsView()
         case .settings:
