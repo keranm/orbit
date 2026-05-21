@@ -67,7 +67,9 @@ final class SettingsTests: XCTestCase {
             systemPrompt: "Be concise."
         )
         var collected = ""
-        for try await token in stream { collected += token }
+        for try await event in stream {
+            if case .token(let t) = event { collected += t }
+        }
         XCTAssertEqual(collected, "ok")
     }
 
@@ -79,7 +81,9 @@ final class SettingsTests: XCTestCase {
             systemPrompt: ""
         )
         var collected = ""
-        for try await token in stream { collected += token }
+        for try await event in stream {
+            if case .token(let t) = event { collected += t }
+        }
         XCTAssertEqual(collected, "ok")
     }
 

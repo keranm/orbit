@@ -1,11 +1,13 @@
 {
   "images" : [
     {
+      "filename" : "Nova-logo-16.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "16x16"
     },
     {
+      "filename" : "Nova-logo-32 1.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "16x16"

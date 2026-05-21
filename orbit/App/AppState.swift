@@ -41,6 +41,12 @@ final class AppState {
     /// MainWindowView observes this and flips its showOnboarding state.
     var showOnboardingRequest = false
 
+    /// Persisted CodeViewModel so context survives navigation switches.
+    var codeViewModel = CodeViewModel()
+
+    /// When non-nil, the next view to mount should inject this prompt content.
+    var pendingPromptForCode: String?
+
     /// Shared reference for components that need the active model ref but
     /// can't hold an injected AppState (e.g. NovaOverlayViewController).
     static weak var current: AppState?

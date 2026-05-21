@@ -14,7 +14,7 @@ struct OrbitApp: App {
     /// and the Mini-Chat overlay (which writes chats back into SwiftData).
     static let modelContainer: ModelContainer = {
         do {
-            return try ModelContainer(for: Chat.self, Message.self, PromptTemplate.self, PromptVariable.self, PromptVersion.self)
+            return try ModelContainer(for: Chat.self, Message.self, PromptTemplate.self, PromptVariable.self, PromptVersion.self, PromptRunRecord.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
@@ -34,7 +34,7 @@ struct OrbitApp: App {
         WindowGroup {
             MainWindowView()
                 .environment(appState)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 1100, minHeight: 700)
                 .task {
                     // Expose AppState to components outside the SwiftUI hierarchy
                     AppState.current = appState
@@ -69,7 +69,7 @@ struct OrbitApp: App {
         .modelContainer(Self.modelContainer)
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1100, height: 700)
+        .defaultSize(width: 1280, height: 800)
         .windowResizability(.contentMinSize)
         #endif
         .commands {

@@ -34,6 +34,17 @@ final class RuntimeManager {
     /// The launch configuration used for the currently-running process.
     private(set) var currentLaunchConfig: RuntimeLaunchConfiguration = .localOnly
 
+    // MARK: - Dashboard metrics
+
+    /// Routing metrics from /api/status, refreshed every 30s.
+    private(set) var routingMetrics: RoutingMetrics?
+    /// GPU info from /api/status.
+    private(set) var gpuInfo: [GPUInfo]?
+    /// Peer entries from /api/status (for mesh network panel).
+    private(set) var meshPeers: [MeshPeerEntry] = []
+    /// System resource monitor for live CPU / memory / disk readings.
+    private(set) var systemResources = SystemResourceMonitor()
+
     // MARK: - Configuration
 
     let apiPort: Int = 9337
@@ -349,6 +360,19 @@ final class RuntimeManager {
         try content.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
 
+    /// Hot-swaps the active model ref without restarting the runtime.
+    /// Updates `config.toml` for persistence and sets `activeModelRef` so
+    /// subsequent chat requests are routed to the new model.
+    func switchActiveModel(to ref: String) {
+        guard !ref.isEmpty, activeModelRef != ref else { return }
+        do {
+            try ensureModelConfigured(ref)
+            activeModelRef = ref
+        } catch {
+            NSLog("Failed to switch model: \(error.localizedDescription)")
+        }
+    }
+
     /// Returns true if `~/.mesh-llm/config.toml` contains a `[[models]]` section.
     func configTomlHasModels() -> Bool {
         let path = (("~/.mesh-llm/config.toml" as NSString).expandingTildeInPath)
@@ -569,6 +593,10 @@ final class RuntimeManager {
             break
         }
         localInviteToken = statusData.inviteToken
+
+        routingMetrics = statusData.routingMetrics
+        gpuInfo = statusData.gpus
+        meshPeers = statusData.peers ?? []
     }
 
     /// Refreshes the list of models available through the connected mesh.

@@ -19,58 +19,66 @@ struct NewChatView: View {
     }
 
     var body: some View {
-        switch appState.runtimeStatus {
-        case .notInstalled:
-            runtimeState(
-                icon: "arrow.down.circle",
-                iconColor: Color.oWarningAmber,
-                headline: "Orbit isn't set up yet",
-                body: "The AI runtime needs to be installed before you can start a conversation.",
-                primaryLabel: "Set up Orbit",
-                primaryAction: {
-                    appState.showOnboardingRequest = true
-                }
-            )
-        case .noModelConfigured:
-            runtimeState(
-                icon: "sparkles",
-                iconColor: Color.oAccent,
-                headline: "No model selected",
-                body: "Choose a model to start chatting with your AI.",
-                primaryLabel: "Browse Models",
-                primaryAction: { appState.route = .models }
-            )
-        case .offline:
-            runtimeState(
-                icon: "pause.circle",
-                iconColor: Color.oWarningAmber,
-                headline: "AI is paused",
-                body: "Your AI runtime isn't running. Start it to continue chatting.",
-                primaryLabel: "Start",
-                primaryAction: { Task { await appState.runtimeManager.start() } }
-            )
-        case .error:
-            runtimeState(
-                icon: "exclamationmark.triangle",
-                iconColor: Color.oWarningAmber,
-                headline: "Orbit couldn't start",
-                body: "Something went wrong when starting your AI. This is unusual and can usually be fixed quickly.",
-                primaryLabel: "Try Again",
-                primaryAction: { Task { await appState.runtimeManager.start() } }
-            )
-        case .ready where appState.activeModelRef == nil:
-            // Runtime is up but we don't have a model identifier — guide to Models.
-            runtimeState(
-                icon: "cpu",
-                iconColor: Color.oAccent,
-                headline: "No model active",
-                body: "The AI is running but no model is selected. Choose one to start chatting.",
-                primaryLabel: "Choose a Model",
-                primaryAction: { appState.route = .models }
-            )
-        default:
-            // .ready (with model), .starting, .stopping — show chat home
-            chatHomeContent
+        Group {
+            switch appState.runtimeStatus {
+            case .notInstalled:
+                runtimeState(
+                    icon: "arrow.down.circle",
+                    iconColor: Color.oWarningAmber,
+                    headline: "Orbit isn't set up yet",
+                    body: "The AI runtime needs to be installed before you can start a conversation.",
+                    primaryLabel: "Set up Orbit",
+                    primaryAction: {
+                        appState.showOnboardingRequest = true
+                    }
+                )
+            case .noModelConfigured:
+                runtimeState(
+                    icon: "sparkles",
+                    iconColor: Color.oAccent,
+                    headline: "No model selected",
+                    body: "Choose a model to start chatting with your AI.",
+                    primaryLabel: "Browse Models",
+                    primaryAction: { appState.route = .models }
+                )
+            case .offline:
+                runtimeState(
+                    icon: "pause.circle",
+                    iconColor: Color.oWarningAmber,
+                    headline: "AI is paused",
+                    body: "Your AI runtime isn't running. Start it to continue chatting.",
+                    primaryLabel: "Start",
+                    primaryAction: { Task { await appState.runtimeManager.start() } }
+                )
+            case .error:
+                runtimeState(
+                    icon: "exclamationmark.triangle",
+                    iconColor: Color.oWarningAmber,
+                    headline: "Orbit couldn't start",
+                    body: "Something went wrong when starting your AI. This is unusual and can usually be fixed quickly.",
+                    primaryLabel: "Try Again",
+                    primaryAction: { Task { await appState.runtimeManager.start() } }
+                )
+            case .ready where appState.activeModelRef == nil:
+                // Runtime is up but we don't have a model identifier — guide to Models.
+                runtimeState(
+                    icon: "cpu",
+                    iconColor: Color.oAccent,
+                    headline: "No model active",
+                    body: "The AI is running but no model is selected. Choose one to start chatting.",
+                    primaryLabel: "Choose a Model",
+                    primaryAction: { appState.route = .models }
+                )
+            default:
+                // .ready (with model), .starting, .stopping — show chat home
+                chatHomeContent
+            }
+        }
+        .task {
+            if let prompt = appState.pendingPromptForCode {
+                appState.pendingPromptForCode = nil
+                composerText = prompt
+            }
         }
     }
 

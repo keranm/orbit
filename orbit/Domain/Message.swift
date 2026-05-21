@@ -14,6 +14,15 @@ final class Message {
     /// True if streaming was interrupted before completion.
     var isInterrupted: Bool
 
+    /// Completion tokens from the stream's final usage chunk.
+    var tokenCount: Int?
+    /// Prompt tokens from the stream's final usage chunk.
+    var promptTokenCount: Int?
+    /// Wall-clock time in seconds from send() to first content token.
+    var inferenceLatency: TimeInterval?
+    /// True when inference ran on the local port (9337) vs. a mesh-routed node.
+    var wasLocalInference: Bool = true
+
     var chat: Chat?
 
     init(role: String, content: String = "") {

@@ -33,27 +33,48 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var appShell: some View {
+        if appState.isProMode {
+            proShell
+        } else {
+            normalShell
+        }
+    }
+
+    private var normalShell: some View {
         NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
         } detail: {
-            ZStack(alignment: .topTrailing) {
-                detailContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                // Nova only appears on chat screens — not Models or Settings.
-                if novaVisible {
-                    NovaView(state: runtimeDrivenNovaState, size: 72)
-                        .padding(.top, OSpacing.lg)
-                        .padding(.trailing, OSpacing.xl)
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                }
-            }
-            .animation(.easeInOut(duration: 0.2), value: novaVisible)
-            .background(Color.oBackground)
+            contentZStack
+                .ignoresSafeArea(edges: .top)
         }
         .navigationSplitViewStyle(.balanced)
+    }
+
+    private var proShell: some View {
+        VStack(spacing: 0) {
+            ProNavStrip()
+            Divider()
+            contentZStack
+        }
+    }
+
+    private var contentZStack: some View {
+        ZStack(alignment: .topTrailing) {
+            detailContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Nova only appears on chat screens — not Models or Settings.
+            if novaVisible {
+                NovaView(state: runtimeDrivenNovaState, size: 72)
+                    .padding(.top, OSpacing.lg)
+                    .padding(.trailing, OSpacing.xl)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: novaVisible)
+        .background(Color.oBackground)
     }
 
     /// Nova is an emotional presence for chat and absent from all other screens.
@@ -86,8 +107,7 @@ struct MainWindowView: View {
             ChatViewLoader(chatID: id)
         case .prompts:
             if appState.isProMode {
-                let service = PromptService(container: OrbitApp.modelContainer)
-                PromptsLibraryView(service: service)
+                PromptsLibraryView()
             } else {
                 PromptsView()
             }
@@ -96,11 +116,11 @@ struct MainWindowView: View {
         case .settings:
             SettingsView()
         case .dashboard:
-            ProPlaceholderView(title: "Mesh Dashboard", subtitle: "Mesh inference metrics and system monitoring.")
+            ProDashboardView()
         case .coding:
-            ProPlaceholderView(title: "Code", subtitle: "AI-augmented code editor.")
+            ProCodeView()
         case .playground:
-            ProPlaceholderView(title: "Playground", subtitle: "Model testing and parameter experimentation.")
+            ProPlaygroundView()
         }
     }
 }

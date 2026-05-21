@@ -149,7 +149,9 @@ final class ChatServiceTests: XCTestCase {
             model: "mock"
         )
         var collected = ""
-        for try await token in stream { collected += token }
+        for try await event in stream {
+            if case .token(let t) = event { collected += t }
+        }
         XCTAssertEqual(collected, "Hello world")
     }
 
@@ -161,7 +163,7 @@ final class ChatServiceTests: XCTestCase {
         )
         var count = 0
         for try await _ in stream { count += 1 }
-        XCTAssertEqual(count, 0)
+        XCTAssertEqual(count, 1, "Should yield exactly one .done event")
     }
 
     func test_mockService_throwingError_propagates() async {
@@ -213,7 +215,7 @@ final class MockChatService: ChatServiceProtocol {
         messages: [ChatRequestMessage],
         model: String,
         systemPrompt: String = ""
-    ) -> AsyncThrowingStream<String, Error> {
+    ) -> AsyncThrowingStream<StreamEvent, Error> {
         let tokens = self.tokens
         let error = self.error
         let delay = self.delay
@@ -225,8 +227,9 @@ final class MockChatService: ChatServiceProtocol {
                 }
                 for token in tokens {
                     if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
-                    continuation.yield(token)
+                    continuation.yield(.token(token))
                 }
+                continuation.yield(.done(promptTokens: nil, completionTokens: nil))
                 continuation.finish()
             }
         }

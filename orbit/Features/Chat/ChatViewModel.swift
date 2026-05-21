@@ -121,6 +121,9 @@ final class ChatViewModel {
         // user preferences, and optionally local context.
         let systemMessage = PromptSettings.buildSystemMessage()
 
+        let sendTime = Date()
+        var firstTokenTime: Date?
+
         streamTask = Task {
             do {
                 let stream = service.streamCompletion(
@@ -130,11 +133,21 @@ final class ChatViewModel {
                 )
                 appState?.novaState = .responding
 
-                for try await token in stream {
+                for try await event in stream {
                     guard !Task.isCancelled else { break }
-                    assistantMsg.content += token
-                    // SwiftData @Observable propagates content changes to MessageBubble directly;
-                    // no need to reassign sortedMessages on every token.
+
+                    switch event {
+                    case .token(let token):
+                        if firstTokenTime == nil { firstTokenTime = Date() }
+                        assistantMsg.content += token
+                    case .done(let promptTokens, let completionTokens):
+                        assistantMsg.tokenCount = completionTokens
+                        assistantMsg.promptTokenCount = promptTokens
+                        if let ft = firstTokenTime {
+                            assistantMsg.inferenceLatency = ft.timeIntervalSince(sendTime)
+                        }
+                        assistantMsg.wasLocalInference = true
+                    }
                 }
 
                 guard !Task.isCancelled else {

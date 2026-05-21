@@ -114,9 +114,9 @@ final class MiniChatPanelViewModel {
                     model: modelRef,
                     systemPrompt: systemMessage
                 )
-                for try await token in stream {
+                for try await event in stream {
                     guard !Task.isCancelled else { break }
-                    assistantMsg.content += token
+                    if case .token(let t) = event { assistantMsg.content += t }
                 }
                 guard !Task.isCancelled else {
                     assistantMsg.isStreaming = false

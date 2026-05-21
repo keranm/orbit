@@ -2,7 +2,7 @@ import SwiftData
 import Foundation
 
 @Model
-final class PromptTemplate {
+final class PromptTemplate: Identifiable {
     @Attribute(.unique) var id: UUID
     var name: String
     var templateDescription: String
@@ -15,6 +15,7 @@ final class PromptTemplate {
     /// Optional model ref to use when testing this prompt.
     var modelAssociation: String?
     var usageCount: Int
+    var notes: String = ""
 
     @Relationship(deleteRule: .cascade, inverse: \PromptVariable.template)
     var variables: [PromptVariable] = []
@@ -39,5 +40,6 @@ final class PromptTemplate {
         updatedAt = .now
         version = 1
         usageCount = 0
+        notes = ""
     }
 }

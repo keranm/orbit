@@ -44,6 +44,25 @@ enum MeshConnectionState: Equatable {
         case .error(let msg):            return "error — \(msg)"
         }
     }
+
+    var peerCountOptional: Int? {
+        switch self {
+        case .connectedPrivate(let n), .connectedPublic(let n): return n
+        default: return nil
+        }
+    }
+
+    var statusLabel: String {
+        switch self {
+        case .disconnected:         return "Mesh: Offline"
+        case .connectingPrivate,
+             .connectingPublic:     return "Mesh: Connecting…"
+        case .connectedPrivate,
+             .connectedPublic:      return "Mesh: Connected"
+        case .reconnecting:         return "Mesh: Reconnecting…"
+        case .error:                return "Mesh: Error"
+        }
+    }
 }
 
 // MARK: - Mesh Mode
@@ -108,28 +127,89 @@ struct MeshAPIStatus: Decodable {
     let isHost: Bool?
     let isClient: Bool?
     let llamaReady: Bool?
-    let inviteToken: String?         // the current node's invite token (field: "token")
+    let inviteToken: String?
     let peers: [MeshPeerEntry]?
     let servingModels: [String]?
     let availableModels: [String]?
     let hostedModels: [String]?
     let version: String?
+    let routingMetrics: RoutingMetrics?
+    let inflightRequests: Int?
+    let gpus: [GPUInfo]?
+    let myHostname: String?
+    let myVRAMGB: Double?
+    let publicationState: String?
+    let modelSizeGB: Double?
 
-    /// Number of currently connected peers.
     var peerCount: Int { peers?.count ?? 0 }
 
     enum CodingKeys: String, CodingKey {
-        case nodeId          = "node_id"
-        case nodeState       = "node_state"
-        case isHost          = "is_host"
-        case isClient        = "is_client"
-        case llamaReady      = "llama_ready"
-        case inviteToken     = "token"
+        case nodeId           = "node_id"
+        case nodeState        = "node_state"
+        case isHost           = "is_host"
+        case isClient         = "is_client"
+        case llamaReady       = "llama_ready"
+        case inviteToken      = "token"
         case peers
-        case servingModels   = "serving_models"
-        case availableModels = "available_models"
-        case hostedModels    = "hosted_models"
+        case servingModels    = "serving_models"
+        case availableModels  = "available_models"
+        case hostedModels     = "hosted_models"
         case version
+        case routingMetrics   = "routing_metrics"
+        case inflightRequests = "inflight_requests"
+        case gpus
+        case myHostname       = "my_hostname"
+        case myVRAMGB         = "my_vram_gb"
+        case publicationState = "publication_state"
+        case modelSizeGB      = "model_size_gb"
+    }
+}
+
+struct RoutingMetrics: Decodable {
+    let requestCount: Int?
+    let successfulRequests: Int?
+    let successRate: Double?
+    let avgAttemptMs: Double?
+    let completionTokensObserved: Int?
+    let throughputSamples: [Double]?
+    let pressure: MetricsPressure?
+    let avgQueueWaitMs: Double?
+    let retryCount: Int?
+    let failoverCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case requestCount             = "request_count"
+        case successfulRequests       = "successful_requests"
+        case successRate              = "success_rate"
+        case avgAttemptMs             = "avg_attempt_ms"
+        case completionTokensObserved = "completion_tokens_observed"
+        case throughputSamples        = "throughput_samples"
+        case pressure
+        case avgQueueWaitMs           = "avg_queue_wait_ms"
+        case retryCount               = "retry_count"
+        case failoverCount            = "failover_count"
+    }
+}
+
+struct MetricsPressure: Decodable {
+    let localServiceShare: Double?
+    let remoteServiceShare: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case localServiceShare  = "local_service_share"
+        case remoteServiceShare = "remote_service_share"
+    }
+}
+
+struct GPUInfo: Decodable {
+    let name: String?
+    let vramBytes: Int?
+    let reservedBytes: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case vramBytes    = "vram_bytes"
+        case reservedBytes = "reserved_bytes"
     }
 }
 
