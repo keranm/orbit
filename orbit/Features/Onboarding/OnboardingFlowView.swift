@@ -20,7 +20,7 @@ struct OnboardingFlowView: View {
             switch self {
             case .welcome:    return "Welcome"
             case .howItWorks: return "How Orbit Works"
-            case .install:    return "Install or Connect"
+            case .install:    return "Requirements Check"
             case .chooseModel: return "Choose First Model"
             case .ready:      return "Ready to Go"
             }
@@ -32,7 +32,7 @@ struct OnboardingFlowView: View {
             switch step {
             case .welcome:                      return .welcome
             case .howItWorks:                   return .howItWorks
-            case .systemCheck, .installRuntime: return .install
+            case .systemCheck: return .install
             case .chooseExperience:             return .chooseModel
             case .preparing, .complete:         return .ready
             }
@@ -62,7 +62,6 @@ struct OnboardingFlowView: View {
             updateNovaState(for: step)
         }
         .onChange(of: viewModel.checksDone)  { _, done in if done { appState.novaState = .idle } }
-        .onChange(of: viewModel.installDone) { _, done in if done { appState.novaState = .idle } }
         .onChange(of: viewModel.prepareDone) { _, done in if done { appState.novaState = .success } }
     }
 
@@ -70,12 +69,12 @@ struct OnboardingFlowView: View {
 
     private func updateNovaState(for step: OnboardingViewModel.Step) {
         switch step {
-        case .welcome, .howItWorks, .chooseExperience:
+        case .welcome, .howItWorks:
             appState.novaState = .idle
         case .systemCheck:
             appState.novaState = viewModel.checksDone ? .idle : .thinking
-        case .installRuntime:
-            appState.novaState = viewModel.installDone ? .idle : .responding
+        case .chooseExperience:
+            appState.novaState = viewModel.prepareDone ? .idle : .responding
         case .preparing:
             appState.novaState = viewModel.prepareDone ? .success : .responding
         case .complete:
@@ -227,7 +226,6 @@ struct OnboardingFlowView: View {
         case .welcome:          WelcomeStep(viewModel: viewModel)
         case .howItWorks:       HowItWorksStep(viewModel: viewModel)
         case .systemCheck:      SystemCheckStep(viewModel: viewModel)
-        case .installRuntime:   InstallRuntimeStep(viewModel: viewModel)
         case .chooseExperience: ChooseExperienceStep(viewModel: viewModel)
         case .preparing:        PreparingStep(viewModel: viewModel)
         case .complete:         CompleteStep(viewModel: viewModel, onComplete: completeOnboarding)
@@ -262,25 +260,116 @@ struct OnboardingFlowView: View {
                 Spacer().frame(width: 40)
             }
 
-            Spacer()
+            // Inline download progress for the Choose Model step
+            if viewModel.step == .chooseExperience, viewModel.downloadState == .inProgress {
+                progressBar(for: viewModel.downloadProgress)
+            } else {
+                Spacer()
+            }
 
             if !viewModel.step.isLast {
-                Button(action: { viewModel.advance() }) {
-                    Text(continueLabel)
-                        .font(.oBodyMedium)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, OSpacing.lg)
-                        .padding(.vertical, OSpacing.sm)
-                        .background(
-                            RoundedRectangle(cornerRadius: ORadius.pill)
-                                .fill(continueEnabled ? Color.oAccent : Color.oTextTertiary)
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(!continueEnabled)
-                .accessibilityIdentifier("onboarding_continue")
+                continueButton
             }
         }
+    }
+
+    @ViewBuilder
+    private var continueButton: some View {
+        if viewModel.step == .chooseExperience {
+            chooseExperienceButton
+        } else {
+            defaultContinueButton
+        }
+    }
+
+    @ViewBuilder
+    private var chooseExperienceButton: some View {
+        switch viewModel.downloadState {
+        case .completed:
+            Button(action: { viewModel.advance() }) {
+                Text("Continue")
+                    .font(.oBodyMedium)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, OSpacing.lg)
+                    .padding(.vertical, OSpacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: ORadius.pill)
+                            .fill(Color.oAccent)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("onboarding_continue")
+
+        case .inProgress:
+            Button(action: {}) {
+                Text("Downloading…")
+                    .font(.oBodyMedium)
+                    .foregroundStyle(Color.oTextTertiary)
+                    .padding(.horizontal, OSpacing.lg)
+                    .padding(.vertical, OSpacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: ORadius.pill)
+                            .fill(Color.oSurfaceSecondary)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(true)
+
+        case .failed:
+            Button(action: { viewModel.startDownload() }) {
+                Text("Retry")
+                    .font(.oBodyMedium)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, OSpacing.lg)
+                    .padding(.vertical, OSpacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: ORadius.pill)
+                            .fill(Color.oWarningAmber)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("onboarding_retry")
+
+        case .idle:
+            Button(action: { viewModel.advance() }) {
+                Text("Download Model")
+                    .font(.oBodyMedium)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, OSpacing.lg)
+                    .padding(.vertical, OSpacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: ORadius.pill)
+                            .fill(Color.oSuccessGreen)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("onboarding_download")
+        }
+    }
+
+    private var defaultContinueButton: some View {
+        Button(action: { viewModel.advance() }) {
+            Text(continueLabel)
+                .font(.oBodyMedium)
+                .foregroundStyle(.white)
+                .padding(.horizontal, OSpacing.lg)
+                .padding(.vertical, OSpacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: ORadius.pill)
+                        .fill(continueEnabled ? Color.oAccent : Color.oTextTertiary)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!continueEnabled)
+        .accessibilityIdentifier("onboarding_continue")
+    }
+
+    private func progressBar(for progress: Double) -> AnyView {
+        AnyView(ProgressView(value: progress, total: 1.0)
+            .progressViewStyle(.linear)
+            .tint(Color.oAccent)
+            .frame(maxWidth: .infinity, minHeight: 6)
+            .padding(.trailing, OSpacing.md))
     }
 
     private var continueLabel: String {
@@ -294,7 +383,7 @@ struct OnboardingFlowView: View {
     private var continueEnabled: Bool {
         switch viewModel.step {
         case .systemCheck:    return viewModel.checksDone
-        case .installRuntime: return viewModel.installDone
+        case .chooseExperience: return viewModel.downloadState == .completed
         case .preparing:      return viewModel.prepareDone
         default:              return true
         }

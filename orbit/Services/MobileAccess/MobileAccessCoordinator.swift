@@ -32,7 +32,13 @@ final class MobileAccessCoordinator {
         settingsStore = MobileAccessSettingsStore()
         trustStore = DeviceTrustStore()
         pairingService = PairingTrustService(trustStore: trustStore)
-        chatBridge = MobileChatBridge(runtimeManager: runtimeManager, chatService: chatService)
+        // Use a dedicated ChatService with its own isolated URLSession so mobile
+        // requests never share connection pools or caches with the Mac's chat.
+        let mobileService = ChatService(
+            apiPort: runtimeManager.apiPort,
+            session: MobileChatBridge.mobileSession
+        )
+        chatBridge = MobileChatBridge(runtimeManager: runtimeManager, chatService: mobileService)
         apiServer = LocalMobileAPIServer(
             pairingService: pairingService,
             trustStore: trustStore,

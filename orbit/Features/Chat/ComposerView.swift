@@ -14,12 +14,13 @@ struct ComposerView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: OSpacing.sm) {
+        HStack(alignment: .center, spacing: OSpacing.sm) {
             TextField("Ask anything…", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.oBody)
                 .foregroundStyle(Color.oTextPrimary)
                 .lineLimit(1...8)
+                .fixedSize(horizontal: false, vertical: true)
                 .focused($focused)
                 .onKeyPress(.return, phases: .down) { press in
                     // Shift+Return → let the system insert a newline

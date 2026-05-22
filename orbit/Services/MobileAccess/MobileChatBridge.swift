@@ -10,6 +10,14 @@ final class MobileChatBridge {
         self.chatService = chatService
     }
 
+    /// Dedicated URLSession for mobile chat completions — isolated from URLSession.shared
+    /// so Mac and mobile requests never share connection pools or response caches.
+    static let mobileSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return URLSession(configuration: config)
+    }()
+
     func streamChat(
         modelId: String,
         messages: [ChatMessage],
@@ -51,7 +59,11 @@ final class MobileChatBridge {
 
                 let stream = chatService.streamCompletion(
                     messages: requestMessages,
-                    model: runtimeModelRef
+                    model: runtimeModelRef,
+                    systemPrompt: "",
+                    temperature: nil, topP: nil, maxTokens: nil,
+                    frequencyPenalty: nil, presencePenalty: nil,
+                    user: "mobile-\(deviceId)"
                 )
 
                 do {

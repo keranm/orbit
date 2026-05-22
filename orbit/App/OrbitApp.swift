@@ -16,7 +16,26 @@ struct OrbitApp: App {
         do {
             return try ModelContainer(for: Chat.self, Message.self)
         } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
+            // Schema evolved between builds — delete the store and start fresh.
+            // Chat history is lost but the app stays usable. Production builds
+            // should add explicit SwiftData migrations instead.
+            NSLog("Orbit: ModelContainer init failed (\(error)). Deleting store and retrying.")
+            let fm = FileManager.default
+            let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.keranmckenzie.orbit"
+            let storeDir = appSupport.appendingPathComponent(bundleID)
+            if let files = try? fm.contentsOfDirectory(at: storeDir, includingPropertiesForKeys: nil) {
+                for file in files where file.lastPathComponent.hasSuffix(".store")
+                    || file.lastPathComponent.hasSuffix(".store-shm")
+                    || file.lastPathComponent.hasSuffix(".store-wal") {
+                    try? fm.removeItem(at: file)
+                }
+            }
+            do {
+                return try ModelContainer(for: Chat.self, Message.self)
+            } catch {
+                fatalError("Orbit: ModelContainer unrecoverable after store deletion: \(error)")
+            }
         }
     }()
 
@@ -44,16 +63,12 @@ struct OrbitApp: App {
                     } else {
                         await appState.runtimeManager.detectInstall()
                         // Restore mesh join config from previous session.
-                        // This is now async — it sets the config then immediately
-                        // tries to resolve reconnecting → connected if the runtime is up.
                         await appState.runtimeManager.restoreMeshConfigIfNeeded()
-                        // Auto-start: if a model is configured and the runtime
-                        // isn't already running, start it immediately. The sidebar
-                        // status indicator communicates progress — the user should
-                        // never see the "AI is paused" screen on a normal launch.
-                        if appState.runtimeManager.status == .offline {
-                            Task { await appState.runtimeManager.start() }
-                        }
+                        // Auto-start is handled by ensureRunning() in appShell.task
+                        // (MainWindowView). Starting here as well races with it:
+                        // the second start() call cancels the first startupTask while
+                        // the first process still holds port 9337, causing the second
+                        // process to exit immediately → "AI paused" on every launch.
                         // Auto-restore Mobile Access if it was enabled before closing.
                         // Poll until the runtime is ready (up to 60s) then re-enable.
                         Task {
@@ -89,7 +104,12 @@ struct OrbitApp: App {
                 Button("New Chat") { appState.route = .newChat }
                     .keyboardShortcut("n", modifiers: .command)
             }
-            CommandGroup(replacing: .help) {}
+            CommandGroup(replacing: .help) {
+                Button("Send Feedback…") {
+                    AppState.current?.showFeedbackRequest = true
+                }
+                .keyboardShortcut("/", modifiers: [.command, .shift])
+            }
         }
 
         // ── Menu bar presence ──

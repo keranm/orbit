@@ -91,13 +91,11 @@ struct ModelCatalogSheet: View {
                                 isInstalled: viewModel.isInstalled(ref: model.ref),
                                 downloadPhase: viewModel.downloadPhase(for: model.ref),
                                 onDownload: {
-                                    guard let bin = appState.runtimeManager.binaryPath else { return }
-                                    viewModel.startDownload(ref: model.ref, binaryPath: bin, rm: appState.runtimeManager)
+                                    viewModel.startDownload(ref: model.ref, rm: appState.runtimeManager)
                                 },
                                 onCancel: { viewModel.cancelDownload(ref: model.ref) },
                                 onRetry: {
-                                    guard let bin = appState.runtimeManager.binaryPath else { return }
-                                    viewModel.retryDownload(ref: model.ref, binaryPath: bin, rm: appState.runtimeManager)
+                                    viewModel.retryDownload(ref: model.ref, rm: appState.runtimeManager)
                                 }
                             )
                         }
@@ -393,7 +391,7 @@ enum ModelCategory: String, CaseIterable {
 private struct CatalogRowView: View {
     let model: CatalogModel
     let isInstalled: Bool
-    let downloadPhase: ModelService.DownloadPhase?
+    let downloadPhase: ModelDownloadService.Phase?
     let onDownload: () -> Void
     let onCancel: () -> Void
     let onRetry: () -> Void
@@ -461,11 +459,11 @@ private struct CatalogRowView: View {
     private var actionArea: some View {
         if let phase = downloadPhase {
             switch phase {
-            case .starting:
+            case .resolving:
                 startingView
             case .downloading(let p):
                 downloadingView(progress: p)
-            case .verifying:
+            case .verifying, .caching:
                 installingView
             case .done:
                 installedBadge

@@ -227,7 +227,8 @@ final class MockChatService: ChatServiceProtocol {
         topP: Double?,
         maxTokens: Int?,
         frequencyPenalty: Double?,
-        presencePenalty: Double?
+        presencePenalty: Double?,
+        user: String?
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         stream(messages: messages)
     }

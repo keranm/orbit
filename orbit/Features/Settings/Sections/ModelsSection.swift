@@ -13,26 +13,27 @@ struct ModelsSection: View {
                 )
                 Divider().padding(.leading, OSpacing.md)
                 // Cache directory
-                VStack(alignment: .leading, spacing: OSpacing.xs) {
-                    HStack {
-                        Text("Storage location")
-                            .font(.oBody)
-                            .foregroundStyle(Color.oTextPrimary)
-                        Spacer()
-                        Button("Open in Finder") {
-                            openCacheDirInFinder()
+                Button { openCacheDirInFinder() } label: {
+                    VStack(alignment: .leading, spacing: OSpacing.xs) {
+                        HStack {
+                            Text("Storage location")
+                                .font(.oBody)
+                                .foregroundStyle(Color.oTextPrimary)
+                            Spacer()
+                            Text("Open in Finder")
+                                .font(.oCaptionMed)
+                                .foregroundStyle(Color.oAccent)
                         }
-                        .buttonStyle(.plain)
-                        .font(.oCaptionMed)
-                        .foregroundStyle(Color.oAccent)
+                        Text(cacheDirDisplay)
+                            .font(.oMicro)
+                            .foregroundStyle(Color.oTextTertiary)
+                            .lineLimit(1)
                     }
-                    Text(cacheDirDisplay)
-                        .font(.oMicro)
-                        .foregroundStyle(Color.oTextTertiary)
-                        .lineLimit(1)
+                    .padding(.horizontal, OSpacing.md)
+                    .padding(.vertical, OSpacing.sm)
+                    .settingsRowHoverable()
                 }
-                .padding(.horizontal, OSpacing.md)
-                .padding(.vertical, OSpacing.sm)
+                .buttonStyle(.plain)
             }
 
             Spacer().frame(height: OSpacing.md)

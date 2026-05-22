@@ -84,26 +84,27 @@ struct ResetSection: View {
     // MARK: - Remove Mesh-LLM row
 
     private var removeMeshLLMRow: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Remove Mesh-LLM and Models")
-                    .font(.oBodyMedium)
-                    .foregroundStyle(Color.oTextPrimary)
-                Text("Uninstall the runtime, downloaded models, and config before deleting Orbit.")
-                    .font(.oCaption)
-                    .foregroundStyle(Color.oTextSecondary)
-                    .lineSpacing(2)
+        Button { showRemoveMeshLLM = true } label: {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Remove Mesh-LLM and Models")
+                        .font(.oBodyMedium)
+                        .foregroundStyle(Color.oTextPrimary)
+                    Text("Uninstall the runtime, downloaded models, and config before deleting Orbit.")
+                        .font(.oCaption)
+                        .foregroundStyle(Color.oTextSecondary)
+                        .lineSpacing(2)
+                }
+                Spacer()
+                Text("Remove…")
+                    .font(.oCaptionMed)
+                    .foregroundStyle(Color.oErrorRed)
             }
-            Spacer()
-            Button("Remove…") {
-                showRemoveMeshLLM = true
-            }
-            .buttonStyle(.plain)
-            .font(.oCaptionMed)
-            .foregroundStyle(Color.oErrorRed)
+            .padding(.horizontal, OSpacing.md)
+            .padding(.vertical, OSpacing.sm)
+            .settingsRowHoverable()
         }
-        .padding(.horizontal, OSpacing.md)
-        .padding(.vertical, OSpacing.sm)
+        .buttonStyle(.plain)
     }
 
     // MARK: - Actions
@@ -165,28 +166,14 @@ struct ResetSection: View {
         showConfirm: Binding<Bool>,
         action: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.oBodyMedium)
-                    .foregroundStyle(Color.oTextPrimary)
-                Text(subtitle)
-                    .font(.oCaption)
-                    .foregroundStyle(Color.oTextSecondary)
-                    .lineSpacing(2)
-            }
-            Spacer()
-            Button(label) { showConfirm.wrappedValue = true }
-                .buttonStyle(.plain)
-                .font(.oCaptionMed)
-                .foregroundStyle(Color.oErrorRed)
-                .confirmationDialog(confirmMessage, isPresented: showConfirm, titleVisibility: .visible) {
-                    Button(label, role: .destructive, action: action)
-                    Button("Cancel", role: .cancel) {}
-                }
-        }
-        .padding(.horizontal, OSpacing.md)
-        .padding(.vertical, OSpacing.sm)
+        DestructiveSettingsRow(
+            title: title,
+            subtitle: subtitle,
+            label: label,
+            confirmMessage: confirmMessage,
+            showConfirm: showConfirm,
+            action: action
+        )
     }
 }
 
@@ -441,22 +428,32 @@ private struct RemoveMeshLLMSheet: View {
                 Image(systemName: "arrow.counterclockwise.circle")
                     .font(.system(size: 13))
                     .foregroundStyle(Color.oAccent)
-                Text("To reinstall, go to the chat screen and tap \"Set up Orbit\".")
+                Text("Restart Orbit to begin setup again.")
                     .font(.oCaption)
                     .foregroundStyle(Color.oTextSecondary)
                     .lineSpacing(2)
             }
 
-            Button("Done") { dismiss() }
+            HStack(spacing: OSpacing.sm) {
+                Button("Done") { dismiss() }
+                    .buttonStyle(.plain)
+                    .font(.oBody)
+                    .foregroundStyle(Color.oTextSecondary)
+
+                Button("Begin Setup") {
+                    dismiss()
+                    appState.showOnboardingRequest = true
+                }
                 .buttonStyle(.plain)
                 .font(.oBodyMedium)
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, OSpacing.lg)
                 .padding(.vertical, OSpacing.sm)
                 .background(
                     RoundedRectangle(cornerRadius: ORadius.pill)
                         .fill(Color.oAccent)
                 )
+            }
         }
     }
 
@@ -527,9 +524,56 @@ private struct RemoveMeshLLMSheet: View {
 
             await appState.runtimeManager.detectInstall()
 
+            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+
             withAnimation {
                 phase = .done(result)
             }
+        }
+    }
+}
+
+// MARK: - Full-row destructive button with hover
+
+private struct DestructiveSettingsRow: View {
+    let title: String
+    let subtitle: String
+    let label: String
+    let confirmMessage: String
+    let showConfirm: Binding<Bool>
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            showConfirm.wrappedValue = true
+        } label: {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.oBodyMedium)
+                        .foregroundStyle(Color.oTextPrimary)
+                    Text(subtitle)
+                        .font(.oCaption)
+                        .foregroundStyle(Color.oTextSecondary)
+                        .lineSpacing(2)
+                }
+                Spacer()
+                Text(label)
+                    .font(.oCaptionMed)
+                    .foregroundStyle(Color.oErrorRed)
+            }
+            .padding(.horizontal, OSpacing.md)
+            .padding(.vertical, OSpacing.sm)
+            .background(isHovered ? Color.oSurfaceSecondary : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .confirmationDialog(confirmMessage, isPresented: showConfirm, titleVisibility: .visible) {
+            Button(label, role: .destructive, action: action)
+            Button("Cancel", role: .cancel) {}
         }
     }
 }

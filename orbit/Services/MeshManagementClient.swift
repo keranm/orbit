@@ -16,7 +16,7 @@ final class MeshManagementClient: Sendable {
 
     init(managementPort: Int = 3131) {
         self.port = managementPort
-        self.baseURL = URL(string: "http://localhost:\(managementPort)")!
+        self.baseURL = URL(string: "http://127.0.0.1:\(managementPort)")!
     }
 
     // MARK: - /api/status

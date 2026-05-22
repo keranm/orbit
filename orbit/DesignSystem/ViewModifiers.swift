@@ -50,6 +50,21 @@ struct OBadgeModifier: ViewModifier {
     }
 }
 
+// MARK: - Settings row hover
+
+/// Adds full-area hover feedback to a settings row label.
+/// Apply inside the Button label so the background fills the whole hit target.
+struct OSettingsRowHoverModifier: ViewModifier {
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(isHovered ? Color.oSurfaceSecondary : Color.clear)
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
+    }
+}
+
 // MARK: - View extensions
 
 extension View {
@@ -63,5 +78,11 @@ extension View {
 
     func oBadge(color: Color = .oAccentSoft, textColor: Color = .oAccent) -> some View {
         modifier(OBadgeModifier(color: color, textColor: textColor))
+    }
+
+    /// Makes a settings row fully clickable with a hover highlight.
+    /// Use inside a Button label: `HStack { … }.settingsRowHoverable()`
+    func settingsRowHoverable() -> some View {
+        modifier(OSettingsRowHoverModifier())
     }
 }

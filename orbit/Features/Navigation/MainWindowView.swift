@@ -26,6 +26,12 @@ struct MainWindowView: View {
                     UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
                     withAnimation(.easeInOut(duration: 0.35)) { showOnboarding = true }
                 }
+                .sheet(isPresented: Binding(
+                    get: { appState.showFeedbackRequest },
+                    set: { appState.showFeedbackRequest = $0 }
+                )) {
+                    FeedbackView().environment(appState)
+                }
         }
     }
 
@@ -40,6 +46,9 @@ struct MainWindowView: View {
                 .ignoresSafeArea(edges: .top)
         }
         .navigationSplitViewStyle(.balanced)
+        .task {
+            await appState.runtimeManager.ensureRunning()
+        }
     }
 
     private var contentZStack: some View {
@@ -79,10 +88,10 @@ struct MainWindowView: View {
         .animation(.spring(duration: 0.3), value: appState.runtimeManager.meshFallbackMessage != nil)
     }
 
-    /// Nova is an emotional presence for chat and absent from all other screens.
+    /// Nova lives inside ChatHistoryPanel for chat screens — no top-right overlay needed there.
     private var novaVisible: Bool {
         switch appState.route {
-        case .newChat, .chat: return true
+        case .newChat, .chat: return false
         case .explore, .prompts, .models, .settings: return false
         }
     }

@@ -19,7 +19,7 @@ final class ModelsViewModel {
 
     // MARK: - Download queue: ref → current phase
 
-    private(set) var downloadQueue: [String: ModelService.DownloadPhase] = [:]
+    private(set) var downloadQueue: [String: ModelDownloadService.Phase] = [:]
 
     // MARK: - Errors (inline, not modal)
 
@@ -41,7 +41,6 @@ final class ModelsViewModel {
     // MARK: - Private
 
     private var downloadTasks: [String: Task<Void, Never>] = [:]
-    private let service = ModelService()
 
     // MARK: - Load installed models
 
@@ -115,36 +114,29 @@ final class ModelsViewModel {
 
     // MARK: - Download
 
-    func startDownload(ref: String, binaryPath: URL, rm: RuntimeManager) {
+    func startDownload(ref: String, rm: RuntimeManager) {
         guard downloadTasks[ref] == nil else { return }
-        downloadQueue[ref] = .starting
+        downloadQueue[ref] = .resolving
 
         downloadTasks[ref] = Task {
             defer { downloadTasks[ref] = nil }
 
-            // Stop any running runtime before spawning the download CLI.
-            // rm.stop() handles lsof+SIGTERM fallback and port verification.
-            let shouldRestart = rm.status == .ready || rm.status == .starting
-            if shouldRestart {
-                await rm.stop()
-            }
+            let service = ModelDownloadService(cacheDir: rm.cacheDir)
 
             do {
-                for try await phase in service.download(binaryPath: binaryPath, ref: ref) {
+                for try await phase in service.download(ref: ref) {
                     downloadQueue[ref] = phase
                     if case .done = phase {
+                        try rm.ensureModelConfigured(ref)
                         await loadInstalled(rm: rm)
                         downloadQueue.removeValue(forKey: ref)
-                        if shouldRestart { await rm.start() }
                         break
                     }
                     if case .failed = phase {
-                        if shouldRestart { await rm.start() }
                         break
                     }
                 }
             } catch {
-                if shouldRestart { await rm.start() }
                 downloadQueue[ref] = .failed("Download stopped. Try again.")
             }
         }
@@ -156,9 +148,9 @@ final class ModelsViewModel {
         downloadQueue.removeValue(forKey: ref)
     }
 
-    func retryDownload(ref: String, binaryPath: URL, rm: RuntimeManager) {
+    func retryDownload(ref: String, rm: RuntimeManager) {
         cancelDownload(ref: ref)
-        startDownload(ref: ref, binaryPath: binaryPath, rm: rm)
+        startDownload(ref: ref, rm: rm)
     }
 
     // MARK: - Set active model
@@ -196,7 +188,7 @@ final class ModelsViewModel {
         removeError = nil
 
         do {
-            try await service.remove(binaryPath: binaryPath, ref: ref)
+            try await ModelService().remove(binaryPath: binaryPath, ref: ref)
             await loadInstalled(rm: rm)
             if selectedModel?.id == model.id { selectedModel = nil }
         } catch {
@@ -216,7 +208,7 @@ final class ModelsViewModel {
 
     // MARK: - Helpers
 
-    func downloadPhase(for ref: String) -> ModelService.DownloadPhase? {
+    func downloadPhase(for ref: String) -> ModelDownloadService.Phase? {
         downloadQueue[ref]
     }
 

@@ -25,21 +25,27 @@ struct ChatView: View {
     // MARK: - Content
 
     private func chatContent(vm: ChatViewModel) -> some View {
-        VStack(spacing: 0) {
-            messageList(vm: vm)
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                messageList(vm: vm)
+                Divider()
+                ComposerView(
+                    text: Binding(get: { vm.inputText }, set: { vm.inputText = $0 }),
+                    isStreaming: vm.isStreaming,
+                    canSend: vm.canSend,
+                    onSend: { Task { await vm.send() } },
+                    onCancel: { vm.cancelStream() }
+                )
+                .padding(.horizontal, OSpacing.xl)
+                .padding(.vertical, OSpacing.md)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.oBackground)
+
             Divider()
-            ComposerView(
-                text: Binding(get: { vm.inputText }, set: { vm.inputText = $0 }),
-                isStreaming: vm.isStreaming,
-                canSend: vm.canSend,
-                onSend: { Task { await vm.send() } },
-                onCancel: { vm.cancelStream() }
-            )
-            .padding(.horizontal, OSpacing.xl)
-            .padding(.vertical, OSpacing.md)
+            ChatHistoryPanel(activeChatID: chat.id)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.oBackground)
     }
 
     // MARK: - Message list
@@ -48,8 +54,7 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: OSpacing.md) {
-                    // Top padding — Nova companion overlay sits here
-                    Color.clear.frame(height: OSpacing.xxl)
+                    Color.clear.frame(height: OSpacing.md)
 
                     ForEach(vm.sortedMessages, id: \.id) { message in
                         MessageBubble(message: message)
@@ -66,25 +71,11 @@ struct ChatView: View {
                 }
                 .padding(.bottom, OSpacing.md)
             }
-            .mask(scrollFadeMask)
             .onChange(of: vm.sortedMessages.count) { scrollToBottom(proxy: proxy) }
             .onChange(of: vm.isStreaming) { _, streaming in
                 if streaming { scrollToBottom(proxy: proxy) }
             }
         }
-    }
-
-    /// Gradient that fades messages as they scroll beneath the Nova overlay area.
-    private var scrollFadeMask: some View {
-        LinearGradient(
-            stops: [
-                .init(color: .clear,  location: 0.00),
-                .init(color: .black,  location: 0.07),
-                .init(color: .black,  location: 1.00),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {

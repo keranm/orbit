@@ -123,26 +123,27 @@ struct GeneralSection: View {
         actionLabel: String,
         action: @escaping () -> Void
     ) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.oBody)
-                    .foregroundStyle(Color.oTextPrimary)
-                Text(detail)
-                    .font(.oCaption)
-                    .foregroundStyle(Color.oTextTertiary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Button(action: action) {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.oBody)
+                        .foregroundStyle(Color.oTextPrimary)
+                    Text(detail)
+                        .font(.oCaption)
+                        .foregroundStyle(Color.oTextTertiary)
+                        .lineLimit(1)
+                }
+                Spacer()
                 Text(actionLabel)
                     .font(.oCaptionMed)
                     .foregroundStyle(Color.oAccent)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, OSpacing.md)
+            .padding(.vertical, OSpacing.sm)
+            .settingsRowHoverable()
         }
-        .padding(.horizontal, OSpacing.md)
-        .padding(.vertical, OSpacing.sm)
+        .buttonStyle(.plain)
     }
 
     private func shortcutRow(label: String, keys: String) -> some View {

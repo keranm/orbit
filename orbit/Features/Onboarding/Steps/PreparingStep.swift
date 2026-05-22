@@ -52,18 +52,16 @@ struct PreparingStep: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, OSpacing.md)
-        .onAppear { viewModel.startPrepare() }
+        .onAppear {
+            viewModel.startServing()
+        }
     }
 
     // MARK: - Startup note
 
     private var startupNote: some View {
         VStack(alignment: .leading, spacing: OSpacing.xs) {
-            Text("On first run, Orbit may download a small model file. This is a one-time step.")
-                .font(.oCaption)
-                .foregroundStyle(Color.oTextTertiary)
-                .lineSpacing(2)
-            Text("If it takes more than a minute, your AI model is downloading in the background.")
+            Text("Your model is being prepared. This may take a moment on first run.")
                 .font(.oCaption)
                 .foregroundStyle(Color.oTextTertiary)
                 .lineSpacing(2)
@@ -73,17 +71,33 @@ struct PreparingStep: View {
     // MARK: - Prepare row
 
     private func prepareRow(_ item: OnboardingViewModel.PrepareItem) -> some View {
-        HStack(spacing: OSpacing.md) {
-            statusIcon(for: item.status)
-                .frame(width: 18)
+        VStack(spacing: OSpacing.xs) {
+            HStack(spacing: OSpacing.md) {
+                statusIcon(for: item.status)
+                    .frame(width: 18)
 
-            Text(item.label)
-                .font(.oBody)
-                .foregroundStyle(statusTextColor(for: item.status))
+                Text(item.label)
+                    .font(.oBody)
+                    .foregroundStyle(statusTextColor(for: item.status))
 
-            Spacer()
+                if let detail = item.detail {
+                    Text(detail)
+                        .font(.oCaption)
+                        .foregroundStyle(Color.oTextTertiary)
+                }
 
-            statusDetail(for: item)
+                Spacer()
+
+                statusDetail(for: item)
+            }
+
+            if case .active(let progress) = item.status {
+                ProgressView(value: progress > 0 ? progress : nil, total: 1.0)
+                    .progressViewStyle(.linear)
+                    .tint(Color.oAccent)
+                    .frame(height: 4)
+                    .padding(.top, OSpacing.xs)
+            }
         }
         .padding(.vertical, OSpacing.xs)
     }
@@ -96,7 +110,9 @@ struct PreparingStep: View {
                 .stroke(Color.oDivider, lineWidth: 1.5)
                 .frame(width: 14, height: 14)
         case .active:
-            SpinnerSmall()
+            ProgressView()
+                .controlSize(.small)
+                .tint(Color.oAccent)
         case .done:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(Color.oSuccessGreen)
@@ -126,6 +142,7 @@ struct PreparingStep: View {
         }
     }
 
+
     private func statusTextColor(for status: OnboardingViewModel.PrepareItem.Status) -> Color {
         switch status {
         case .pending:       return Color.oTextTertiary
@@ -145,7 +162,7 @@ struct PreparingStep: View {
                 .lineSpacing(2)
 
             Button {
-                viewModel.retryPrepare()
+                viewModel.retryServing()
             } label: {
                 Text("Try again")
                     .font(.oBodyMedium)
@@ -163,20 +180,4 @@ struct PreparingStep: View {
     }
 }
 
-// MARK: - Spinner
 
-private struct SpinnerSmall: View {
-    @State private var angle: Double = 0
-    var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.7)
-            .stroke(Color.oAccent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-            .frame(width: 14, height: 14)
-            .rotationEffect(.degrees(angle))
-            .onAppear {
-                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                    angle = 360
-                }
-            }
-    }
-}

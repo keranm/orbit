@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AboutSection: View {
     @Environment(AppState.self) private var appState
+    @State private var showFeedback = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: OSpacing.xl) {
@@ -141,6 +142,22 @@ struct AboutSection: View {
 
     private var linksBlock: some View {
         VStack(alignment: .leading, spacing: OSpacing.xs) {
+            // Feedback button
+            Button { showFeedback = true } label: {
+                HStack(spacing: OSpacing.xs) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.oAccent)
+                    Text("Send Feedback")
+                        .font(.oCaption)
+                        .foregroundStyle(Color.oAccent)
+                }
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showFeedback) {
+                FeedbackView().environment(appState)
+            }
+
             linkRow(
                 icon: "arrow.up.right.square",
                 label: "Orbit on GitHub",

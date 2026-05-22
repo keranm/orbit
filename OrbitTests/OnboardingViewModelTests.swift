@@ -30,19 +30,9 @@ final class OnboardingViewModelTests: XCTestCase {
         }
     }
 
-    func test_initialInstallProgress_isZero() {
-        let vm = OnboardingViewModel()
-        XCTAssertEqual(vm.installProgress, 0)
-    }
-
     func test_initialChecksDone_isFalse() {
         let vm = OnboardingViewModel()
         XCTAssertFalse(vm.checksDone)
-    }
-
-    func test_initialInstallDone_isFalse() {
-        let vm = OnboardingViewModel()
-        XCTAssertFalse(vm.installDone)
     }
 
     // MARK: - Step navigation
@@ -60,9 +50,13 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(vm.direction, .forward)
     }
 
-    func test_advance_doesNotGoBeyondComplete() {
+    func test_advance_doesNotGoBeyondComplete() async {
         let vm = OnboardingViewModel()
-        for _ in 0..<100 { vm.advance() }
+        vm.skipDelays = true
+        for _ in 0..<10 { vm.advance() }
+        try? await Task.sleep(for: .milliseconds(200))
+        vm.advance()
+        vm.advance()
         XCTAssertEqual(vm.step, .complete)
     }
 
@@ -99,8 +93,8 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertFalse(OnboardingViewModel.Step.preparing.isLast)
     }
 
-    func test_allCases_hasSevenSteps() {
-        XCTAssertEqual(OnboardingViewModel.Step.allCases.count, 7)
+    func test_allCases_hasSixSteps() {
+        XCTAssertEqual(OnboardingViewModel.Step.allCases.count, 6)
     }
 
     func test_step_prev_ofWelcome_isNil() {
@@ -156,13 +150,6 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(vm.checksDone)
     }
 
-    func test_completeAllForTesting_setsInstallDone() {
-        let vm = OnboardingViewModel()
-        vm.completeAllForTesting()
-        XCTAssertTrue(vm.installDone)
-        XCTAssertEqual(vm.installProgress, 1.0)
-    }
-
     func test_completeAllForTesting_setsPrepareDone() {
         let vm = OnboardingViewModel()
         vm.completeAllForTesting()
@@ -200,20 +187,12 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(vm.checksDone)
     }
 
-    func test_startInstall_completesWithSkipDelays() async {
+    func test_startDownload_completesWithSkipDelays() async {
         let vm = OnboardingViewModel()
         vm.skipDelays = true
-        vm.startInstall()
-        try? await Task.sleep(for: .milliseconds(50))
-        XCTAssertTrue(vm.installDone)
-    }
-
-    func test_startPrepare_completesWithSkipDelays() async {
-        let vm = OnboardingViewModel()
-        vm.skipDelays = true
-        vm.startPrepare()
+        vm.startDownload()
         try? await Task.sleep(for: .milliseconds(200))
-        XCTAssertTrue(vm.prepareDone)
+        XCTAssertEqual(vm.downloadState, .completed)
     }
 
     func test_startChecks_resetsStateBeforeRunning() {
@@ -232,60 +211,26 @@ final class OnboardingViewModelTests: XCTestCase {
 
     // MARK: - Skip logic (advance from systemCheck)
 
-    func test_advance_fromSystemCheck_goesToInstallRuntime_whenBinaryMissing() {
-        // When no runtimeManager is injected (binaryPath == nil), binary is not present.
-        // advance() from systemCheck must go to installRuntime (normal path).
-        let vm = OnboardingViewModel()
-        vm.step = .systemCheck
-        vm.advance()
-        XCTAssertEqual(vm.step, .installRuntime,
-            "Must navigate to installRuntime when binary is not present")
-    }
-
-    func test_advance_fromSystemCheck_skipsInstall_whenBinaryPresent_noModel() {
-        // Simulate: binary detected, but no model configured.
-        // Expected: skip installRuntime, land on chooseExperience.
+    func test_advance_fromSystemCheck_withoutModel_goesToChooseExperience() {
         let vm = OnboardingViewModel()
         let rm = RuntimeManager()
         vm.runtimeManager = rm
         vm.step = .systemCheck
 
-        // Give the RuntimeManager a real binaryPath so binaryPath != nil.
-        // We use the candidate path; even if the file doesn't exist on disk,
-        // the skip logic only checks rm.binaryPath (the property, not the filesystem).
-        // detectInstall sets binaryPath, but we need to fake it here.
-        // Since binaryPath is private(set), we test via the observable runtimeManager state
-        // by calling enterMockReadyState (which sets binaryPath to a non-nil URL).
-        // Then we clear activeModelRef so configTomlHasModels appears false (no model).
-        // The skip logic checks rm.binaryPath != nil AND rm.configTomlHasModels().
-        // If configTomlHasModels() returns false (no config.toml model), we should
-        // land on chooseExperience.
-        // Note: configTomlHasModels reads the real filesystem. If the test environment
-        // has a config.toml with models, this test would behave differently.
-        // We accept this as an integration-level test; the unit path via skipDelays=true
-        // always bypasses skip logic.
         let configHasModels = rm.configTomlHasModels()
         if !configHasModels {
-            rm.enterMockReadyState()  // sets binaryPath != nil but leaves config as-is
             vm.advance()
-            // configTomlHasModels() is still false (mock doesn't write config)
-            // → expect chooseExperience
             XCTAssertEqual(vm.step, .chooseExperience,
-                "Must skip to chooseExperience when binary present but no model configured")
+                "No model configured → must go to chooseExperience")
         }
-        // else: test environment has a configured model, skip this assertion
     }
 
-    func test_useExistingModel_isResetOnBack() {
+    func test_advance_fromSystemCheck_alwaysGoesToChooseExperience() {
         let vm = OnboardingViewModel()
-        // Manually set useExistingModel to simulate a skip having occurred
-        // We can't set private(set) directly, but we can verify via back():
-        // back() must reset useExistingModel, accessible via completeAllForTesting path.
-        vm.step = .preparing
-        vm.back()
-        // After back, useExistingModel should be false (reset on any backward navigation).
-        XCTAssertFalse(vm.useExistingModel,
-            "back() must reset useExistingModel so the skip is re-evaluated on next advance()")
+        vm.step = .systemCheck
+        vm.advance()
+        XCTAssertEqual(vm.step, .chooseExperience,
+            "Should always go to chooseExperience (skip logic removed)")
     }
 
     func test_existingModelDisplayName_isNonEmpty_whenActiveRefSet() {

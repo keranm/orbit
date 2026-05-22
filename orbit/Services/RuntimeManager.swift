@@ -72,7 +72,10 @@ final class RuntimeManager {
     private let managementClient = MeshManagementClient()
 
     /// Candidate binary paths checked in priority order.
+    /// mesh-llm installer (≥ May 2026) places the binary inside a mesh-bundle
+    /// subdirectory rather than directly in ~/.local/bin — both paths are checked.
     static let candidatePaths: [String] = [
+        ("~/.local/bin/mesh-bundle/mesh-llm" as NSString).expandingTildeInPath,
         ("~/.local/bin/mesh-llm" as NSString).expandingTildeInPath,
         ("~/.cargo/bin/mesh-llm" as NSString).expandingTildeInPath,
         "/usr/local/bin/mesh-llm",
@@ -108,6 +111,11 @@ final class RuntimeManager {
         // Query version (best-effort — don't block on failure)
         installedVersion = await queryVersion(binary: binary)
 
+        // Populate installed models from the HF cache immediately so Settings
+        // shows the correct count before the Models screen is ever opened.
+        let cached = scanInstalledModelsFromCache()
+        if !cached.isEmpty { installedModels = cached }
+
         // Extract active model ref from config.toml if present
         let configHasModels = configTomlHasModels()
         if configHasModels {
@@ -125,6 +133,12 @@ final class RuntimeManager {
                 try? await Task.sleep(for: .seconds(2))
                 waited += 2
                 if await client.checkReadiness() { break }
+            }
+            // If still not ready after 30s it's an orphaned/stuck process.
+            // Kill it so the subsequent start() can launch a clean instance.
+            if !(await client.checkReadiness()) {
+                await killProcessOnAPIPort()
+                try? await Task.sleep(for: .milliseconds(300))
             }
         }
 
@@ -418,6 +432,20 @@ final class RuntimeManager {
 
     // MARK: - Lifecycle
 
+    /// Ensures the runtime is running — resolves the binary, transitions to
+    /// `.starting` immediately, and launches if needed.
+    func ensureRunning() async {
+        switch status {
+        case .ready, .starting: return
+        default: break
+        }
+        status = .starting
+        await detectInstall()
+        if status == .offline {
+            await start()
+        }
+    }
+
     /// Starts the Mesh-LLM runtime.
     /// If `modelRef` is provided, writes config.toml first and passes `--model`.
     /// If `modelRef` is nil, starts from existing config.toml.
@@ -471,6 +499,11 @@ final class RuntimeManager {
         status = .starting
         startupTask?.cancel()
         startupTask = Task {
+            // Kill any orphaned process holding port 9337 before launching.
+            // This prevents "address already in use" when a previous session left
+            // mesh-llm running and detectInstall() timed out waiting for it to be ready.
+            await self.killProcessOnAPIPort()
+            try? await Task.sleep(for: .milliseconds(300))
             await self.launchAndMonitor(binary: bin, modelRef: modelRef)
         }
     }
@@ -521,9 +554,9 @@ final class RuntimeManager {
         status = .offline
     }
 
-    /// Kills the process listening on the API port using lsof.
-    /// Safe: only sends SIGTERM; never touches unrelated processes.
+    /// Kills any process holding the API port and waits until the port is free.
     private func killProcessOnAPIPort() async {
+        // Send SIGKILL (not SIGTERM) — we need the port free immediately.
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             let lsof = Process()
             lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
@@ -535,11 +568,33 @@ final class RuntimeManager {
                 let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 let pids = out.components(separatedBy: .newlines).compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
                 for pid in pids {
-                    kill(pid, SIGTERM)
+                    kill(pid, SIGKILL)
                 }
                 cont.resume()
             }
             try? lsof.run()
+        }
+
+        // Poll until the port is actually free (up to 3 seconds).
+        let p = apiPort
+        for _ in 0..<30 {
+            let portFree = await Task.detached {
+                let sock = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+                guard sock >= 0 else { return true }
+                defer { Darwin.close(sock) }
+                var addr = sockaddr_in()
+                addr.sin_family = sa_family_t(AF_INET)
+                addr.sin_port = in_port_t(p).bigEndian
+                addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+                let connected = withUnsafePointer(to: &addr) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        Darwin.connect(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    }
+                } == 0
+                return !connected  // true = port is free
+            }.value
+            if portFree { break }
+            try? await Task.sleep(for: .milliseconds(100))
         }
     }
 
@@ -740,7 +795,7 @@ final class RuntimeManager {
     /// Queries GET /v1/models and returns the first model's `id` field.
     /// This is the authoritative model identifier when the runtime is already serving.
     private func fetchLiveModelRef() async -> String? {
-        guard let url = URL(string: "http://localhost:\(apiPort)/v1/models") else { return nil }
+        guard let url = URL(string: "http://127.0.0.1:\(apiPort)/v1/models") else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
 
@@ -788,6 +843,10 @@ final class RuntimeManager {
                 self.handleTermination(proc: proc, stderr: stderr)
                 self.serveProcess = nil
                 self.keepaliveTask?.cancel()
+                // Cancel the startup polling loop so it stops making health-check
+                // requests after the process has already exited.
+                self.startupTask?.cancel()
+                self.startupTask = nil
             }
         }
         do { try process.run() } catch {
@@ -801,8 +860,11 @@ final class RuntimeManager {
     // MARK: - Private — Process launch
 
     private func launchAndMonitor(binary: URL, modelRef: String?) async {
+        // When modelRef is nil, omit --model so mesh-llm reads ~/.mesh-llm/config.toml
+        // directly. Passing --model explicitly triggers a fresh resolve/download cycle
+        // even when the model is already cached; reading from config.toml uses the cache.
         let config = RuntimeLaunchConfiguration(
-            modelRef: modelRef ?? readModelRefFromConfig(),
+            modelRef: modelRef,
             joinToken: currentLaunchConfig.joinToken,
             meshMode: currentLaunchConfig.meshMode,
             noEnumerateHost: currentLaunchConfig.noEnumerateHost
@@ -812,15 +874,22 @@ final class RuntimeManager {
 
     private func pollUntilReady(timeout: TimeInterval) async {
         let deadline = Date().addingTimeInterval(timeout)
+        // Capture the process reference so we can detect exit even after the
+        // termination handler fires and sets serveProcess = nil.
+        // (serveProcess?.isRunning == false evaluates to false when serveProcess is nil,
+        //  which is wrong — the process HAS exited, we just lost the reference.)
+        let ownedProcess = serveProcess
 
         // Phase 1: wait for /health (HTTP server up)
         var httpUp = false
         while !httpUp && Date() < deadline {
+            guard !Task.isCancelled else { return }
             if await client.checkLiveness() { httpUp = true; break }
-            // Only exit early if OUR process died AND nothing else is serving.
-            // If another process is already on port 9337, keep polling.
-            if serveProcess?.isRunning == false {
+            guard !Task.isCancelled else { return }
+            // Exit early if OUR process has died and nothing else took over port 9337.
+            if ownedProcess?.isRunning == false || (ownedProcess != nil && serveProcess == nil) {
                 if !(await client.checkLiveness()) {
+                    guard !Task.isCancelled else { return }
                     let msg = "The runtime process exited unexpectedly during startup."
                     status = .error(msg)
                     meshConnectionState = .error(msg)
@@ -831,6 +900,7 @@ final class RuntimeManager {
         }
 
         guard httpUp else {
+            guard !Task.isCancelled else { return }
             status = .error("AI took too long to start. Try restarting Orbit.")
             return
         }
@@ -839,7 +909,9 @@ final class RuntimeManager {
         // required, so /readyz (which gates on a local model being loaded) will never
         // return 200. Transition to connected as soon as the HTTP server is up.
         if currentLaunchConfig.meshMode != .none {
+            guard !Task.isCancelled else { return }
             if let liveRef = await fetchLiveModelRef() { activeModelRef = liveRef }
+            guard !Task.isCancelled else { return }
             status = .ready
             switch currentLaunchConfig.meshMode {
             case .private: meshConnectionState = .connectedPrivate(peerCount: 0)
@@ -854,19 +926,21 @@ final class RuntimeManager {
 
         // Phase 2 (local mode only): wait for /readyz (model loaded)
         while Date() < deadline {
+            guard !Task.isCancelled else { return }
             if await client.checkReadiness() {
-                // Sync active model ref from the live API so chat always uses
-                // the identifier the runtime actually reports, not a stale config value.
+                guard !Task.isCancelled else { return }
                 if let liveRef = await fetchLiveModelRef() {
                     activeModelRef = liveRef
                 }
+                guard !Task.isCancelled else { return }
                 status = .ready
                 startKeepalive()
                 await refreshMeshStatus()
                 await refreshMeshModels()
                 return
             }
-            if serveProcess?.isRunning == false {
+            guard !Task.isCancelled else { return }
+            if ownedProcess?.isRunning == false || (ownedProcess != nil && serveProcess == nil) {
                 let msg = "The runtime process exited unexpectedly while loading."
                 status = .error(msg)
                 meshConnectionState = .error(msg)
@@ -875,6 +949,7 @@ final class RuntimeManager {
             try? await Task.sleep(for: .seconds(2))
         }
 
+        guard !Task.isCancelled else { return }
         status = .error("AI took too long to start. Try restarting Orbit.")
     }
 
@@ -1091,9 +1166,29 @@ final class RuntimeManager {
 
     // MARK: - Private — Binary resolution
 
+    /// Support directory where in-app updates are applied.
+    /// Takes priority over the embedded bundle.
+    static let supportBinaryPath: String = {
+        let appSupport = NSSearchPathForDirectoriesInDomains(.applicationSupportDirectory, .userDomainMask, true).first ?? NSHomeDirectory() + "/Library/Application Support"
+        return (appSupport as NSString).appendingPathComponent("Orbit/bin/mesh-llm")
+    }()
+
+    /// Resolves the mesh-llm binary in priority order:
+    /// 1. Support directory (in-app updates replace the bundle binary here)
+    /// 2. Embedded in app bundle (the primary binary — Orbit ships its own mesh-llm)
+    /// 3. System paths (developer override only — not expected in normal use)
     static func resolveBinary() -> URL? {
+        let fm = FileManager.default
+        // 1. Support directory (in-app update)
+        if fm.fileExists(atPath: supportBinaryPath) && fm.isExecutableFile(atPath: supportBinaryPath) {
+            return URL(fileURLWithPath: supportBinaryPath)
+        }
+        // 2. App bundle — this is the correct binary for end users
+        if let embedded = Bundle.main.url(forResource: "mesh-llm", withExtension: nil) {
+            return embedded
+        }
+        // 3. System paths — developer fallback only
         for path in candidatePaths {
-            let fm = FileManager.default
             if fm.fileExists(atPath: path) && fm.isExecutableFile(atPath: path) {
                 return URL(fileURLWithPath: path)
             }

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ChooseExperienceStep: View {
+    @State private var showProgress = false
     var viewModel: OnboardingViewModel
 
     var body: some View {
@@ -23,16 +24,93 @@ struct ChooseExperienceStep: View {
                         tierCard(tier)
                     }
                 }
+
+                if let installed = viewModel.runtimeManager?.installedModels, !installed.isEmpty {
+                    VStack(alignment: .leading, spacing: OSpacing.sm) {
+                        Text("Already installed")
+                            .font(.oCaptionMed)
+                            .foregroundStyle(Color.oTextTertiary)
+                            .padding(.top, OSpacing.sm)
+
+                        ForEach(installed) { model in
+                            installedModelCard(model)
+                        }
+                    }
+                }
+
+            if case .failed(let msg) = viewModel.downloadState {
+                HStack(spacing: OSpacing.sm) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(Color.oWarningAmber)
+                    Text(msg)
+                        .font(.oCaption)
+                        .foregroundStyle(Color.oWarningAmber)
+                }
+                .padding(.top, OSpacing.xs)
             }
-
-            Spacer()
-
-            CharacterPoseView(poseName: "Thinking")
-                .accessibilityHidden(true)
-                .padding(.top, OSpacing.sm)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, OSpacing.md)
+
+        Spacer()
+
+        CharacterPoseView(poseName: "Thinking")
+            .accessibilityHidden(true)
+            .padding(.top, OSpacing.sm)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.bottom, OSpacing.md)
+}
+
+    private func installedModelCard(_ model: InstalledModelEntry) -> some View {
+        let isPicked = viewModel.selectedExistingModel?.id == model.id
+
+        return Button {
+            withAnimation(.spring(duration: 0.2)) {
+                if isPicked {
+                    viewModel.selectedExistingModel = nil
+                } else {
+                    viewModel.selectedExistingModel = model
+                    viewModel.selectedTier = .fast  // deselect tier selection
+                }
+            }
+        } label: {
+            HStack(spacing: OSpacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: ORadius.md)
+                        .fill(isPicked ? Color.oMeshTeal : Color.oAccentSoft)
+                        .frame(width: 38, height: 38)
+                    Image(systemName: "square.stack")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(isPicked ? Color.white : Color.oAccent)
+                }
+
+                VStack(alignment: .leading, spacing: OSpacing.xxs) {
+                    Text(model.displayName)
+                        .font(.oBodyMedium)
+                        .foregroundStyle(Color.oTextPrimary)
+                    if let size = model.size {
+                        Text("\(size) — Already downloaded")
+                            .font(.oCaption)
+                            .foregroundStyle(Color.oTextSecondary)
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: isPicked ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isPicked ? Color.oMeshTeal : Color.oDivider)
+                    .font(.system(size: 18))
+            }
+            .padding(OSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: ORadius.lg)
+                    .fill(isPicked ? Color.oMeshTeal.opacity(0.08) : Color.oSurfaceSecondary)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ORadius.lg)
+                            .stroke(isPicked ? Color.oMeshTeal.opacity(0.4) : Color.clear, lineWidth: 1.5)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func tierCard(_ tier: OnboardingViewModel.ExperienceTier) -> some View {
@@ -41,6 +119,7 @@ struct ChooseExperienceStep: View {
         return Button {
             withAnimation(.spring(duration: 0.2)) {
                 viewModel.selectedTier = tier
+                viewModel.selectedExistingModel = nil  // deselect any existing model
             }
         } label: {
             HStack(spacing: OSpacing.md) {

@@ -7,7 +7,7 @@ final class OnboardingViewModel {
     // MARK: - Step navigation
 
     enum Step: Int, CaseIterable, Equatable {
-        case welcome, howItWorks, systemCheck, installRuntime, chooseExperience, preparing, complete
+        case welcome, howItWorks, systemCheck, chooseExperience, preparing, complete
 
         var isFirst: Bool { self == .welcome }
         var isLast: Bool  { self == .complete }
@@ -18,7 +18,6 @@ final class OnboardingViewModel {
             case .welcome:          return "Welcome"
             case .howItWorks:       return "How It Works"
             case .systemCheck:      return "System Check"
-            case .installRuntime:   return "Install Runtime"
             case .chooseExperience: return "Choose Model"
             case .preparing:        return "Preparing"
             case .complete:         return "Complete"
@@ -55,13 +54,6 @@ final class OnboardingViewModel {
 
     /// Injected from the environment — used for real system checks and runtime start.
     var runtimeManager: RuntimeManager?
-
-    // MARK: - Runtime install
-
-    var installProgress: Double = 0
-    var installMessage: String = "Preparing…"
-    var installDone = false
-    var installError: String?
 
     // MARK: - Experience selection
 
@@ -134,6 +126,9 @@ final class OnboardingViewModel {
     // Default to fast (0.6B) — smallest download, works on all Macs, fastest to start
     var selectedTier: ExperienceTier = .fast
 
+    /// When non-nil, the user picked an already-downloaded model instead of a tier.
+    var selectedExistingModel: InstalledModelEntry?
+
     // MARK: - Model preparation
 
     struct PrepareItem: Identifiable {
@@ -146,6 +141,7 @@ final class OnboardingViewModel {
         let id = UUID()
         let label: String
         var status: Status = .pending
+        var detail: String?
     }
 
     var prepareItems: [PrepareItem] = []
@@ -155,7 +151,6 @@ final class OnboardingViewModel {
     // MARK: - Task handles for cancellation
 
     private var checksTask: Task<Void, Never>?
-    private var installTask: Task<Void, Never>?
     private var prepareTask: Task<Void, Never>?
 
     // Set true in unit tests to skip animation delays and real CLI calls
@@ -166,42 +161,35 @@ final class OnboardingViewModel {
     func advance() {
         guard let rawNext = step.next else { return }
         direction = .forward
-        let next = skipDelays ? rawNext : effectiveNext(from: step, rawNext: rawNext)
+        let next = skipDelays ? rawNext : rawNext
+
+        if step == .chooseExperience, next == .preparing {
+            startDownload()
+            return
+        }
+
         withAnimation(.easeInOut(duration: 0.25)) { step = next }
+    }
+
+    /// Called when download completes — advances from chooseExperience to preparing.
+    func finishDownload() {
+        guard step == .chooseExperience else { return }
+        direction = .forward
+        withAnimation(.easeInOut(duration: 0.25)) { step = .preparing }
+    }
+
+    /// Called when serving is ready — advances from preparing to complete.
+    func finishServing() {
+        guard step == .preparing else { return }
+        direction = .forward
+        withAnimation(.easeInOut(duration: 0.25)) { step = .complete }
     }
 
     func back() {
         guard let prev = step.prev else { return }
         cancelAll()
-        useExistingModel = false  // reset skip state so back→forward re-evaluates
         direction = .backward
         withAnimation(.easeInOut(duration: 0.25)) { step = prev }
-    }
-
-    /// When true, startPrepare() uses the already-configured model ref instead of
-    /// downloading a new one. Set by effectiveNext() when the system check confirms
-    /// a model is already installed and configured.
-    private(set) var useExistingModel = false
-
-    /// Computes the next step, skipping steps whose work is already done.
-    ///
-    /// - Skips `installRuntime` if the system check confirmed the binary is present.
-    /// - Skips `chooseExperience` if a model is already configured in config.toml.
-    private func effectiveNext(from current: Step, rawNext: Step) -> Step {
-        guard current == .systemCheck else { return rawNext }
-
-        let binaryInstalled = runtimeManager?.binaryPath != nil
-        let modelConfigured = runtimeManager?.configTomlHasModels() == true
-
-        guard binaryInstalled else { return rawNext }  // need install → go to installRuntime
-
-        if modelConfigured {
-            // Both runtime and model are present — skip install AND model selection.
-            useExistingModel = true
-            return .preparing
-        }
-        // Runtime present but no model → skip install, pick a model.
-        return .chooseExperience
     }
 
     // MARK: - System checks
@@ -313,98 +301,96 @@ final class OnboardingViewModel {
         }
     }
 
-    // MARK: - Runtime install
+    // MARK: - Model download
 
-    func startInstall() {
-        installProgress = 0
-        installDone = false
-        installError = nil
-        installMessage = "Checking for AI runtime…"
+    enum DownloadState: Equatable {
+        case idle
+        case inProgress
+        case completed
+        case failed(String)
+    }
 
-        installTask?.cancel()
-        installTask = Task {
+    var downloadState: DownloadState = .idle
+    var downloadProgress: Double = 0
+
+    func startDownload() {
+        downloadState = .inProgress
+        downloadProgress = 0
+
+        prepareTask?.cancel()
+        prepareTask = Task {
             guard !Task.isCancelled else { return }
 
-            // Fast path: binary already present
-            let binaryFound = skipDelays ? true : RuntimeManager.resolveBinary() != nil
-
-            if binaryFound {
-                await animateInstallProgress(stages: [
-                    ("Detected existing runtime…", 0.50),
-                    ("Verifying…",                 0.85),
-                    ("Ready",                      1.00),
-                ])
-                guard !Task.isCancelled else { return }
-                installDone = true
-                return
-            }
-
-            // Binary not found — run the official installer
             if skipDelays {
-                // Unit-test path: skip real install
-                installMessage = "Ready"
-                installProgress = 1.0
-                installDone = true
+                downloadProgress = 1
+                downloadState = .completed
+                finishDownload()
                 return
             }
 
-            installMessage = "Connecting to installer…"
-            installProgress = 0.05
+            guard let rm = runtimeManager else {
+                downloadState = .failed("Setup is incomplete. Restart Orbit.")
+                return
+            }
 
-            let service = InstallService()
+            // Resolve model ref
+            let modelRef: String
+            if let picked = selectedExistingModel {
+                modelRef = picked.ref ?? picked.name
+            } else {
+                modelRef = await resolveModelRef(for: selectedTier, rm: rm)
+            }
+            guard !Task.isCancelled else { return }
+
+            // If picking an already-installed model, just configure it
+            if selectedExistingModel != nil {
+                do {
+                    try rm.ensureModelConfigured(modelRef)
+                } catch {
+                    downloadState = .failed("Couldn't configure the model.")
+                    return
+                }
+                downloadProgress = 1.0
+                downloadState = .completed
+                finishDownload()
+                return
+            }
+
+            // Download via direct URLSession instead of mesh-llm models download CLI
+            let service = ModelDownloadService(cacheDir: rm.cacheDir)
+
             do {
-                for try await phase in service.install() {
-                    guard !Task.isCancelled else { return }
+                for try await phase in service.download(ref: modelRef) {
                     switch phase {
-                    case .starting:
-                        installMessage = "Connecting to installer…"
-                        installProgress = 0.05
-                    case .inProgress(let p):
-                        installMessage = p < 0.5 ? "Downloading Orbit runtime…" : "Installing…"
-                        installProgress = 0.05 + p * 0.90
+                    case .resolving:
+                        downloadProgress = 0
+                    case .downloading(let p):
+                        downloadProgress = p
+                    case .verifying:
+                        downloadProgress = 0.95
+                    case .caching:
+                        downloadProgress = 0.98
                     case .done:
-                        installMessage = "Ready"
-                        installProgress = 1.0
-                        installDone = true
+                        downloadProgress = 1.0
+                        downloadState = .completed
+                        try rm.ensureModelConfigured(modelRef)
+                        finishDownload()
+                        return
                     case .failed(let msg):
-                        installMessage = msg
-                        installError = msg
-                        installProgress = 0
+                        downloadState = .failed(msg)
+                        return
                     }
                 }
             } catch {
-                installError = "Couldn't install. Check your network connection and try again."
-                installMessage = installError!
+                downloadState = .failed(error.localizedDescription)
             }
         }
     }
 
-    func retryInstall() {
-        startInstall()
-    }
+    // MARK: - AI serving (screen 5 — preparing)
 
-    private func animateInstallProgress(stages: [(String, Double)]) async {
-        for (message, target) in stages {
-            guard !Task.isCancelled else { return }
-            installMessage = message
-            let steps = skipDelays ? 1 : 20
-            let current = installProgress
-            for s in 1...steps {
-                guard !Task.isCancelled else { return }
-                await pause(skipDelays ? 1 : 60)
-                installProgress = current + (target - current) * Double(s) / Double(steps)
-            }
-        }
-    }
-
-    // MARK: - Model preparation
-
-    func startPrepare() {
-        let modelLabel = useExistingModel ? existingModelDisplayName : selectedTier.displayName
+    func startServing() {
         prepareItems = [
-            PrepareItem(label: "Checking AI runtime"),
-            PrepareItem(label: useExistingModel ? "Verifying model" : "Preparing \(modelLabel)"),
-            PrepareItem(label: "Configuring your model"),
             PrepareItem(label: "Starting your AI"),
         ]
         prepareDone = false
@@ -414,15 +400,12 @@ final class OnboardingViewModel {
         prepareTask = Task {
             guard !Task.isCancelled else { return }
 
-            // Unit-test / skipDelays path: simulate completion without real CLI calls
             if skipDelays {
-                for i in prepareItems.indices {
-                    guard !Task.isCancelled else { return }
-                    prepareItems[i].status = .active(0)
-                    await pause(1)
-                    prepareItems[i].status = .done
-                }
+                prepareItems[0].status = .active(0)
+                await pause(1)
+                prepareItems[0].status = .done
                 prepareDone = true
+                finishServing()
                 return
             }
 
@@ -431,79 +414,49 @@ final class OnboardingViewModel {
                 return
             }
 
-            // Step 1 — Verify runtime binary
+            // Start the runtime — model is cached, so this should be fast.
             prepareItems[0].status = .active(0)
-            if rm.binaryPath == nil { await rm.detectInstall() }
-            guard !Task.isCancelled else { return }
-            guard rm.binaryPath != nil else {
-                setPrepareItemFailed(0, "Runtime not found")
-                setPrepareError("The AI runtime isn't installed. Go back and install it first.")
-                return
-            }
-            prepareItems[0].status = .done
+            prepareItems[0].detail = "Starting mesh-LLM…"
+            await rm.start()
 
-            // Step 2 — Resolve the model ref.
-            // We do NOT call `mesh-llm models download` here: in the +skippy binary
-            // that command panics (Rust async runtime bug). Instead we pass the full ref
-            // to `mesh-llm serve`, which handles downloading as part of startup.
-            prepareItems[1].status = .active(0)
-            let modelRef: String
-            if useExistingModel, let existingRef = rm.activeModelRef {
-                modelRef = existingRef
-            } else {
-                modelRef = await resolveModelRef(for: selectedTier, rm: rm)
-            }
-            prepareItems[1].status = .done
-            guard !Task.isCancelled else { return }
-
-            // Step 3 — Write config.toml (idempotent; ensures config matches selected model)
-            prepareItems[2].status = .active(0)
-            do {
-                try rm.ensureModelConfigured(modelRef)
-                prepareItems[2].status = .done
-            } catch {
-                setPrepareItemFailed(2, "Configuration failed")
-                setPrepareError("Couldn't configure your model. Try again.")
-                return
-            }
-            guard !Task.isCancelled else { return }
-
-            // Step 4 — Start runtime and wait for readiness.
-            // Pass modelRef: nil when using existing config so we don't rewrite it.
-            prepareItems[3].status = .active(0)
-            await rm.start(modelRef: useExistingModel ? nil : modelRef)
-
-            // Poll for ready (up to 5 minutes).
-            // The runtime may download a model on first start, which can take several
-            // minutes on slower connections. Animate progress 0→85% over the first
-            // 270 s so the user sees movement; snap to done when runtime is ready.
-            let deadline = Date().addingTimeInterval(300)
+            let deadline = Date().addingTimeInterval(120)
             let startedAt = Date()
             while Date() < deadline && !Task.isCancelled {
                 let s = rm.status
                 if s == .ready { break }
                 if case .error = s { break }
                 if s == .noModelConfigured || s == .notInstalled { break }
+
                 let elapsed = Date().timeIntervalSince(startedAt)
-                let animated = min(elapsed / 270.0, 0.85)
-                prepareItems[3].status = .active(animated)
+                if elapsed > 5, prepareItems[0].detail == "Starting mesh-LLM…" {
+                    prepareItems[0].detail = "Loading model into memory…"
+                }
+
+                prepareItems[0].status = .active(min(elapsed / 120.0, 0.85))
                 try? await Task.sleep(for: .seconds(2))
             }
 
             guard !Task.isCancelled else { return }
 
             if rm.status == .ready {
-                prepareItems[3].status = .done
+                prepareItems[0].status = .done
                 prepareDone = true
+                finishServing()
             } else {
-                setPrepareItemFailed(3, "Couldn't start")
-                setPrepareError("The AI couldn't start. Check your internet connection — a small supporting model may need to download first.")
+                setPrepareItemFailed(0, "Couldn't start")
+                let detail: String
+                if case .error(let msg) = rm.status {
+                    detail = msg
+                } else {
+                    detail = "The runtime exited before it was ready. Try again."
+                }
+                setPrepareError(detail)
             }
         }
     }
 
-    func retryPrepare() {
-        startPrepare()
+    func retryServing() {
+        startServing()
     }
 
     // MARK: - Helpers
@@ -523,22 +476,9 @@ final class OnboardingViewModel {
     ///   2. Catalog name starts with tier.modelID (e.g. "Qwen3-32B" → "Qwen3-32B-Q4_K_M")
     ///   3. Fallback: pass modelID directly (mesh-llm resolves by catalog name)
     private func resolveModelRef(for tier: ExperienceTier, rm: RuntimeManager) async -> String {
-        let catalog = rm.recommendedModels.isEmpty
-            ? (try? await rm.fetchRecommendedModels()) ?? []
-            : rm.recommendedModels
-
-        // Exact match first — avoids selecting wrong tier model (e.g. "Coder-7B" when we want "8B")
-        if let exact = catalog.first(where: { $0.name == tier.modelID }) {
-            return exact.ref
-        }
-
-        // Prefix match for tiers where modelID is a prefix of the catalog name
-        if let prefix = catalog.first(where: { $0.name.hasPrefix(tier.modelID) }) {
-            return prefix.ref
-        }
-
-        // Fallback: use the hardcoded full HF ref that mesh-llm download accepts directly.
-        // The short catalog name (tier.modelID) is rejected by the +skippy builds.
+        // ModelDownloadService.parseRef requires org/repo@branch:quant format.
+        // The mesh-llm catalog uses a different ref format (org/repo@branch/file.gguf),
+        // so skip catalog matching and always use our hardcoded defaultRef.
         return tier.defaultRef
     }
 
@@ -563,7 +503,6 @@ final class OnboardingViewModel {
 
     private func cancelAll() {
         checksTask?.cancel()
-        installTask?.cancel()
         prepareTask?.cancel()
     }
 
@@ -578,9 +517,6 @@ final class OnboardingViewModel {
         skipDelays = true
         for i in checkItems.indices { checkItems[i].status = .passed }
         checksDone = true
-        installProgress = 1.0
-        installMessage = "Done"
-        installDone = true
         prepareItems = [
             PrepareItem(label: "Checking AI runtime"),
             PrepareItem(label: "Downloading \(selectedTier.displayName)"),

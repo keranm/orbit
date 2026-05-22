@@ -13,6 +13,7 @@ struct MeshSection: View {
     @State private var showPublicDiscovery = false
     @State private var discoveredMeshes: [DiscoveredMesh] = []
     @State private var isDiscovering = false
+    @State private var hoveredFindMesh = false
     @State private var discoverError: String?
     @State private var pendingPublicJoin: DiscoveredMesh?
     @State private var joinError: String?
@@ -218,10 +219,13 @@ struct MeshSection: View {
                                 .foregroundStyle(Color.oTextTertiary)
                         }
                     }
+                    .padding(.horizontal, OSpacing.md)
+                    .padding(.vertical, OSpacing.sm)
+                    .background(hoveredFindMesh ? Color.oSurfaceSecondary : Color.clear)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, OSpacing.md)
-                .padding(.vertical, OSpacing.sm)
+                .onHover { hoveredFindMesh = $0 }
             }
 
             if !discoveredMeshes.isEmpty {

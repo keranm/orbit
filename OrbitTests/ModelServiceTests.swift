@@ -69,34 +69,34 @@ final class ModelServiceTests: XCTestCase {
 
     // MARK: - DownloadPhase equatability
 
-    func test_downloadPhase_starting_equatable() {
-        let a = ModelService.DownloadPhase.starting
-        let b = ModelService.DownloadPhase.starting
+    func test_downloadPhase_resolving_equatable() {
+        let a = ModelDownloadService.Phase.resolving
+        let b = ModelDownloadService.Phase.resolving
         XCTAssertEqual(a, b)
     }
 
     func test_downloadPhase_downloading_equalWhenSameProgress() {
         XCTAssertEqual(
-            ModelService.DownloadPhase.downloading(0.5),
-            ModelService.DownloadPhase.downloading(0.5)
+            ModelDownloadService.Phase.downloading(0.5),
+            ModelDownloadService.Phase.downloading(0.5)
         )
     }
 
     func test_downloadPhase_downloading_notEqualWithDifferentProgress() {
         XCTAssertNotEqual(
-            ModelService.DownloadPhase.downloading(0.3),
-            ModelService.DownloadPhase.downloading(0.7)
+            ModelDownloadService.Phase.downloading(0.3),
+            ModelDownloadService.Phase.downloading(0.7)
         )
     }
 
     func test_downloadPhase_done_equatable() {
-        XCTAssertEqual(ModelService.DownloadPhase.done, .done)
+        XCTAssertEqual(ModelDownloadService.Phase.done, .done)
     }
 
     func test_downloadPhase_failed_equatableWhenSameMessage() {
         XCTAssertEqual(
-            ModelService.DownloadPhase.failed("err"),
-            ModelService.DownloadPhase.failed("err")
+            ModelDownloadService.Phase.failed("err"),
+            ModelDownloadService.Phase.failed("err")
         )
     }
 
@@ -119,33 +119,6 @@ final class ModelServiceTests: XCTestCase {
 
     func test_userFacingError_generic() {
         let msg = ModelService.userFacingError(from: "", exitCode: 1)
-        XCTAssertFalse(msg.isEmpty)
-    }
-
-    // MARK: - InstallService.userFacingError
-
-    func test_installService_permissionDenied() {
-        let msg = InstallService.userFacingError(from: "permission denied while writing", exitCode: 1)
-        XCTAssertTrue(msg.lowercased().contains("permission"))
-    }
-
-    func test_installService_diskFull() {
-        let msg = InstallService.userFacingError(from: "no space left on device", exitCode: 1)
-        XCTAssertTrue(msg.lowercased().contains("space"))
-    }
-
-    func test_installService_networkError() {
-        let msg = InstallService.userFacingError(from: "could not resolve host", exitCode: 6)
-        XCTAssertTrue(msg.lowercased().contains("network") || msg.lowercased().contains("connect"))
-    }
-
-    func test_installService_binaryNotFound_afterSuccessfulExit() {
-        let msg = InstallService.userFacingError(from: "Installation complete", exitCode: 0)
-        XCTAssertFalse(msg.isEmpty)
-    }
-
-    func test_installService_genericFailure() {
-        let msg = InstallService.userFacingError(from: "", exitCode: 1)
         XCTAssertFalse(msg.isEmpty)
     }
 }

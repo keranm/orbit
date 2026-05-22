@@ -24,6 +24,9 @@ final class AppState {
     /// MainWindowView observes this and flips its showOnboarding state.
     var showOnboardingRequest = false
 
+    /// Set to true to present the feedback sheet from the Help menu or any global trigger.
+    var showFeedbackRequest = false
+
     /// Persisted ExploreViewModel so context survives navigation switches.
     var exploreViewModel = ExploreViewModel()
 

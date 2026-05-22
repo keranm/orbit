@@ -5,8 +5,8 @@ struct CompleteStep: View {
     var onComplete: () -> Void
 
     var body: some View {
-        VStack(spacing: OSpacing.xl) {
-            Spacer(minLength: OSpacing.md)
+        VStack(spacing: OSpacing.lg) {
+            Spacer(minLength: 0)
 
             // Nova — celebrating with confetti
             CharacterPoseView(poseName: "Celebrating", showConfetti: true)
@@ -71,10 +71,10 @@ struct CompleteStep: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("onboarding_start_orbit")
 
-            Spacer(minLength: OSpacing.md)
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
-        .padding(.bottom, OSpacing.md)
+        .padding(.vertical, OSpacing.xxl)
     }
 
     private func summaryRow(icon: String, label: String, value: String) -> some View {

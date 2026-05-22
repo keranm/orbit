@@ -11,11 +11,14 @@ struct ChatCompletionRequest: Encodable {
     let maxTokens: Int?
     let frequencyPenalty: Double?
     let presencePenalty: Double?
+    /// Stable identifier for the end-user. Passed to the runtime so it can separate
+    /// KV-cache slots between the Mac session and each mobile device.
+    let user: String?
 
     init(model: String, messages: [ChatRequestMessage],
          temperature: Double? = nil, topP: Double? = nil,
          maxTokens: Int? = nil, frequencyPenalty: Double? = nil,
-         presencePenalty: Double? = nil) {
+         presencePenalty: Double? = nil, user: String? = nil) {
         self.model = model
         self.messages = messages
         self.temperature = temperature
@@ -23,10 +26,11 @@ struct ChatCompletionRequest: Encodable {
         self.maxTokens = maxTokens
         self.frequencyPenalty = frequencyPenalty
         self.presencePenalty = presencePenalty
+        self.user = user
     }
 
     enum CodingKeys: String, CodingKey {
-        case model, messages, stream, temperature
+        case model, messages, stream, temperature, user
         case topP = "top_p"
         case maxTokens = "max_tokens"
         case frequencyPenalty = "frequency_penalty"
@@ -109,6 +113,8 @@ enum ChatError: LocalizedError {
 protocol ChatServiceProtocol: Sendable {
     /// Stream a chat completion with full inference parameters.
     /// All optional parameters default to nil (server chooses defaults).
+    /// `user` is a stable identifier for the caller — passed to the runtime to allow
+    /// KV-cache slot separation between the Mac session and individual mobile devices.
     func streamCompletion(
         messages: [ChatRequestMessage],
         model: String,
@@ -117,7 +123,8 @@ protocol ChatServiceProtocol: Sendable {
         topP: Double?,
         maxTokens: Int?,
         frequencyPenalty: Double?,
-        presencePenalty: Double?
+        presencePenalty: Double?,
+        user: String?
     ) -> AsyncThrowingStream<StreamEvent, Error>
 }
 
@@ -131,7 +138,7 @@ extension ChatServiceProtocol {
         streamCompletion(
             messages: messages, model: model, systemPrompt: systemPrompt,
             temperature: nil, topP: nil, maxTokens: nil,
-            frequencyPenalty: nil, presencePenalty: nil
+            frequencyPenalty: nil, presencePenalty: nil, user: nil
         )
     }
 }
@@ -141,9 +148,15 @@ extension ChatServiceProtocol {
 /// Calls the Mesh-LLM OpenAI-compatible streaming endpoint and yields content tokens.
 final class ChatService: ChatServiceProtocol {
     let apiPort: Int
+    private let session: URLSession
 
-    init(apiPort: Int = 9337) {
+    /// - Parameters:
+    ///   - apiPort: Port the runtime is listening on.
+    ///   - session: URLSession to use. Pass a dedicated instance to isolate connection
+    ///     pools between concurrent callers (e.g. Mac chat vs mobile bridge).
+    init(apiPort: Int = 9337, session: URLSession = .shared) {
         self.apiPort = apiPort
+        self.session = session
     }
 
     /// The exact URL posted to for chat completions. Exposed for regression testing.
@@ -154,24 +167,18 @@ final class ChatService: ChatServiceProtocol {
     func streamCompletion(
         messages: [ChatRequestMessage],
         model: String,
-        systemPrompt: String = ""
-    ) -> AsyncThrowingStream<StreamEvent, Error> {
-        _stream(messages: messages, model: model, systemPrompt: systemPrompt)
-    }
-
-    func streamCompletion(
-        messages: [ChatRequestMessage],
-        model: String,
         systemPrompt: String,
         temperature: Double?,
         topP: Double?,
         maxTokens: Int?,
         frequencyPenalty: Double?,
-        presencePenalty: Double?
+        presencePenalty: Double?,
+        user: String?
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         _stream(messages: messages, model: model, systemPrompt: systemPrompt,
                 temperature: temperature, topP: topP, maxTokens: maxTokens,
-                frequencyPenalty: frequencyPenalty, presencePenalty: presencePenalty)
+                frequencyPenalty: frequencyPenalty, presencePenalty: presencePenalty,
+                user: user)
     }
 
     // MARK: - Internal
@@ -184,7 +191,8 @@ final class ChatService: ChatServiceProtocol {
         topP: Double? = nil,
         maxTokens: Int? = nil,
         frequencyPenalty: Double? = nil,
-        presencePenalty: Double? = nil
+        presencePenalty: Double? = nil,
+        user: String? = nil
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -213,11 +221,12 @@ final class ChatService: ChatServiceProtocol {
                         temperature: temperature, topP: topP,
                         maxTokens: maxTokens,
                         frequencyPenalty: frequencyPenalty,
-                        presencePenalty: presencePenalty
+                        presencePenalty: presencePenalty,
+                        user: user
                     )
                     request.httpBody = try JSONEncoder().encode(body)
 
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, response) = try await session.bytes(for: request)
 
                     if let http = response as? HTTPURLResponse,
                        !(200..<300).contains(http.statusCode) {

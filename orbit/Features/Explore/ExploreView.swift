@@ -25,8 +25,8 @@ struct ExploreView: View {
     // MARK: - Header
 
     private var pageHeader: some View {
-        HStack(spacing: OSpacing.md) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: OSpacing.md) {
+            VStack(alignment: .leading, spacing: OSpacing.xs) {
                 Text("Explore")
                     .font(.oLargeTitle)
                     .foregroundStyle(Color.oTextPrimary)
@@ -49,9 +49,9 @@ struct ExploreView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, OSpacing.md)
-        .padding(.vertical, OSpacing.sm)
-        .background(Color.oSurface)
+        .padding(.horizontal, OSpacing.xxl)
+        .padding(.top, OSpacing.xxl)
+        .padding(.bottom, OSpacing.lg)
     }
 
     // MARK: - File Explorer
@@ -106,7 +106,7 @@ struct ExploreView: View {
                 }
             }
         }
-        .background(Color.oSurface)
+        .background(Color.oBackground)
     }
 
     private var emptyExplorer: some View {
@@ -141,25 +141,32 @@ struct ExploreView: View {
     private func folderRow(_ item: ExploreTreeItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
+                // Disclosure triangle — Xcode style
                 Image(systemName: item.isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 9))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Color.oTextTertiary)
-                Image(systemName: item.isExpanded ? "folder.fill" : "folder")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.oTextTertiary)
+                    .frame(width: 10)
+
+                // Blue folder icon — Xcode style
+                Image(systemName: item.isExpanded ? "folder.fill" : "folder.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(nsColor: .systemBlue))
+
                 Text(item.name)
                     .font(.oCaption)
                     .foregroundStyle(Color.oTextPrimary)
                     .lineLimit(1)
                 Spacer()
             }
-            .padding(.leading, OSpacing.sm + CGFloat(item.depth) * 12)
+            .padding(.leading, OSpacing.xs + CGFloat(item.depth) * 16)
             .padding(.trailing, OSpacing.sm)
             .padding(.vertical, 3)
             .contentShape(Rectangle())
             .onTapGesture { viewModel.toggleFolder(item) }
 
             if item.isExpanded {
+                // AnyView breaks the recursive opaque-type cycle:
+                // treeView → folderRow → treeView causes infinite type inference.
                 AnyView(treeView(items: item.children))
             }
         }
@@ -167,30 +174,49 @@ struct ExploreView: View {
 
     private func fileRow(_ item: ExploreTreeItem) -> some View {
         let selected = viewModel.selectedFileURL == item.url
-        let isText = isTextFile(item.url)
-        return HStack(spacing: OSpacing.xs) {
-            Image(systemName: isText ? "doc.text" : "doc")
-                .font(.system(size: 11))
-                .foregroundStyle(selected ? Color.oAccent : Color.oTextTertiary)
+        return HStack(spacing: 5) {
+            // File icon coloured by type — Xcode style
+            fileIcon(for: item.url)
+
             Text(item.name)
                 .font(.oCaption)
                 .foregroundStyle(selected ? Color.oAccent : Color.oTextPrimary)
                 .lineLimit(1)
             Spacer()
-            if !isText {
-                Image(systemName: "eye")
-                    .font(.system(size: 8))
-                    .foregroundStyle(Color.oTextTertiary.opacity(0.5))
-            }
         }
         .padding(.vertical, 3)
-        .padding(.leading, OSpacing.sm + CGFloat(item.depth) * 12)
+        .padding(.leading, OSpacing.xs + CGFloat(item.depth) * 16 + 14) // align with folder content
         .padding(.trailing, OSpacing.sm)
         .background(selected ? Color.oSidebarSelected : Color.clear)
         .contentShape(Rectangle())
-        .onTapGesture {
-            viewModel.selectFile(item.url)
+        .onTapGesture { viewModel.selectFile(item.url) }
+    }
+
+    private func fileIcon(for url: URL) -> some View {
+        let ext = url.pathExtension.lowercased()
+        let symbol: String
+        let color: Color
+        switch ext {
+        case "swift":
+            symbol = "swift"; color = Color(red: 0.98, green: 0.38, blue: 0.17)
+        case "py":
+            symbol = "doc.fill"; color = Color(nsColor: .systemBlue)
+        case "js", "jsx", "ts", "tsx":
+            symbol = "doc.fill"; color = Color(red: 0.95, green: 0.78, blue: 0.12)
+        case "json", "yaml", "yml", "toml", "plist":
+            symbol = "doc.badge.gearshape.fill"; color = Color(nsColor: .systemGray)
+        case "md", "txt", "markdown":
+            symbol = "doc.text.fill"; color = Color(nsColor: .systemGray)
+        case "png", "jpg", "jpeg", "gif", "svg", "webp", "heic":
+            symbol = "photo.fill"; color = Color(nsColor: .systemPurple)
+        case "sh", "bash", "zsh":
+            symbol = "terminal.fill"; color = Color(nsColor: .systemGreen)
+        default:
+            symbol = "doc.fill"; color = Color(nsColor: .systemGray)
         }
+        return Image(systemName: symbol)
+            .font(.system(size: 11))
+            .foregroundStyle(color)
     }
 
     // MARK: - Preview Panel
@@ -224,7 +250,7 @@ struct ExploreView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .background(Color.oSurface)
+        .background(Color.oBackground)
     }
 
     private var loadingEditor: some View {
@@ -235,7 +261,7 @@ struct ExploreView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .background(Color.oSurface)
+        .background(Color.oBackground)
     }
 
     private func errorEditor(_ error: String) -> some View {
@@ -252,12 +278,12 @@ struct ExploreView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .background(Color.oSurface)
+        .background(Color.oBackground)
     }
 
     private func quickLookPreview(url: URL) -> some View {
         QuickLookPreview(fileURL: url)
-            .background(Color.oSurface)
+            .background(Color.oBackground)
     }
 
     private var textEditor: some View {
@@ -270,11 +296,11 @@ struct ExploreView: View {
                 fileURL: viewModel.selectedFileURL,
                 onSave: { viewModel.saveFile() }
             )
-            .background(Color.oSurface)
+            .background(Color.oBackground)
             Divider()
             editorStatusBar
         }
-        .background(Color.oSurface)
+        .background(Color.oBackground)
     }
 
     private var editorTabBar: some View {
@@ -353,7 +379,7 @@ struct ExploreView: View {
             }
             .padding(.horizontal, OSpacing.md)
             .padding(.vertical, OSpacing.sm)
-            .background(Color.oSurface)
+            .background(Color.oBackground)
 
             contextPanel
 
@@ -378,7 +404,7 @@ struct ExploreView: View {
             Divider()
             assistantComposer
         }
-        .background(Color.oSurface)
+        .background(Color.oBackground)
     }
 
     private var contextPanel: some View {
@@ -459,7 +485,7 @@ struct ExploreView: View {
             .disabled(!viewModel.canSendAssistantMessage || modelRef.isEmpty)
         }
         .padding(OSpacing.sm)
-        .background(Color.oSurface)
+        .background(Color.oBackground)
     }
 }
 

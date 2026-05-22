@@ -118,9 +118,9 @@ final class ExploreViewModel {
     }
 
     var contextSummary: String {
-        guard rootURL != nil || selectedFileURL != nil else { return "No project context" }
+        guard rootURL != nil || selectedFileURL != nil else { return "No folder selected" }
         var parts: [String] = []
-        if let root = rootURL { parts.append("Project: \(root.lastPathComponent)") }
+        if let root = rootURL { parts.append("Folder: \(root.lastPathComponent)") }
         if let file = selectedFileURL { parts.append("File: \(file.lastPathComponent)") }
         if !selectedText.isEmpty {
             let lines = selectedText.components(separatedBy: .newlines).count
@@ -158,7 +158,8 @@ Answer concisely and provide helpful information about the code, content, or fil
             topP: 0.9,
             maxTokens: 2048,
             frequencyPenalty: 0,
-            presencePenalty: 0
+            presencePenalty: 0,
+            user: nil
         )
 
         Task {
@@ -190,9 +191,9 @@ Answer concisely and provide helpful information about the code, content, or fil
     // MARK: - Context builders
 
     private func buildProjectContext() -> String {
-        guard let rootURL else { return "No project folder open.\n" }
+        guard let rootURL else { return "No folder open.\n" }
         let fileCount = treeItems.count
-        return "Project: \(rootURL.lastPathComponent) (\(fileCount) files)\n"
+        return "Folder: \(rootURL.lastPathComponent) (\(fileCount) items)\n"
     }
 
     private func buildFileContext() -> String {
@@ -236,6 +237,10 @@ func isTextFile(_ url: URL) -> Bool {
 
 // MARK: - Tree model
 
+// @Observable so that toggling isExpanded on any node triggers the view to re-render.
+// Without this, SwiftUI's @Observable on ExploreViewModel only tracks the array
+// reference, not mutations inside individual reference-type items.
+@Observable
 final class ExploreTreeItem: Identifiable {
     let id = UUID()
     let url: URL
