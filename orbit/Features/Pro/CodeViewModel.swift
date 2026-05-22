@@ -34,9 +34,18 @@ final class CodeViewModel {
     var assistantMessages: [AssistantMessage] = []
     var assistantInput: String = ""
     var assistantIsStreaming: Bool = false
+    var activePrompt: (id: UUID, name: String, body: String)?
 
-    init(chatService: ChatService = ChatService()) {
-        self.chatService = chatService
+    func setActivePrompt(id: UUID, name: String, body: String) {
+        activePrompt = (id, name, body)
+    }
+
+    func clearActivePrompt() {
+        activePrompt = nil
+    }
+
+    init(chatService: ChatService? = nil) {
+        self.chatService = chatService ?? ChatService()
     }
 
     // MARK: - Folder
@@ -136,8 +145,9 @@ final class CodeViewModel {
         let fileContext = buildFileContext()
         let selectionSnippet = selectedText.isEmpty ? "" : "\n\nSelected text from the open file:\n```\n\(selectedText)\n```"
 
+        let promptPrefix = if let p = activePrompt { "\(p.body)\n\n---\n\n" } else { "" }
         let systemPrompt = """
-You are an AI coding assistant integrated into Orbit's code editor. \
+\(promptPrefix)You are an AI coding assistant integrated into Orbit's code editor. \
 You have access to the user's project context and the currently open file. \
 Answer concisely and provide code examples when helpful.
 
@@ -284,7 +294,7 @@ private func buildTree(from root: URL) async -> [CodeTreeItem] {
 
         var items: [URL: CodeTreeItem] = [:]
 
-        for case let fileURL as URL in enumerator {
+        while let fileURL = enumerator.nextObject() as? URL {
             let resourceValues = try? fileURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
             let isDir = resourceValues?.isDirectory ?? false
             let name = fileURL.lastPathComponent

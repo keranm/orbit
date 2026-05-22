@@ -23,25 +23,31 @@ struct HowItWorksStep: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: OSpacing.xl) {
-            VStack(alignment: .leading, spacing: OSpacing.xs) {
-                Text("How Orbit Works")
-                    .font(.oTitle1)
-                    .foregroundStyle(Color.oTextPrimary)
+        HStack(alignment: .top, spacing: OSpacing.xl) {
+            VStack(alignment: .leading, spacing: OSpacing.xl) {
+                VStack(alignment: .leading, spacing: OSpacing.xs) {
+                    Text("How Orbit Works")
+                        .font(.oTitle1)
+                        .foregroundStyle(Color.oTextPrimary)
 
-                Text("Orbit is the experience layer on top of distributed AI. You control where your data goes.")
-                    .font(.oBody)
-                    .foregroundStyle(Color.oTextSecondary)
-                    .lineSpacing(2)
-            }
+                    Text("Orbit is the experience layer on top of distributed AI. You control where your data goes.")
+                        .font(.oBody)
+                        .foregroundStyle(Color.oTextSecondary)
+                        .lineSpacing(2)
+                }
 
-            HStack(alignment: .top, spacing: OSpacing.md) {
-                ForEach(pillars) { pillar in
-                    pillarCard(pillar)
+                HStack(alignment: .top, spacing: OSpacing.md) {
+                    ForEach(pillars) { pillar in
+                        pillarCard(pillar)
+                    }
                 }
             }
 
-            Spacer(minLength: OSpacing.lg)
+            Spacer()
+
+            CharacterPoseView(poseName: "Curious")
+                .accessibilityHidden(true)
+                .padding(.top, OSpacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, OSpacing.md)

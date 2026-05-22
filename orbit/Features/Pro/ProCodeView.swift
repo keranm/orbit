@@ -25,7 +25,7 @@ struct ProCodeView: View {
         }
         .background(Color.oBackground)
         .task {
-            try? await appState.runtimeManager.fetchInstalledModels()
+            do { _ = try await appState.runtimeManager.fetchInstalledModels() } catch {}
             let descriptor = FetchDescriptor<PromptTemplate>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
             prompts = (try? modelContext.fetch(descriptor)) ?? []
             consumePendingPrompt()
@@ -33,9 +33,14 @@ struct ProCodeView: View {
     }
 
     private func consumePendingPrompt() {
-        guard let prompt = appState.pendingPromptForCode else { return }
-        appState.pendingPromptForCode = nil
-        viewModel.assistantInput = prompt
+        if let chatPrompt = appState.pendingChatPrompt {
+            appState.pendingChatPrompt = nil
+            viewModel.assistantInput = chatPrompt
+        }
+        if let codePrompt = appState.pendingCodePrompt {
+            appState.pendingCodePrompt = nil
+            viewModel.setActivePrompt(id: codePrompt.id, name: codePrompt.name, body: codePrompt.body)
+        }
     }
 
     // MARK: - Header
@@ -445,15 +450,37 @@ private struct ModelPickerView: View {
     }
 
     private var contextPanel: some View {
-        HStack(spacing: OSpacing.xs) {
-            Image(systemName: "info.circle.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(Color.oTextTertiary)
-            Text(viewModel.contextSummary)
-                .font(.oMicro)
-                .foregroundStyle(Color.oTextTertiary)
-                .lineLimit(1)
-            Spacer()
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: OSpacing.xs) {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.oTextTertiary)
+                Text(viewModel.contextSummary)
+                    .font(.oMicro)
+                    .foregroundStyle(Color.oTextTertiary)
+                    .lineLimit(1)
+                Spacer()
+            }
+            if let prompt = viewModel.activePrompt {
+                HStack(spacing: OSpacing.xs) {
+                    Text("prompt:")
+                        .font(.oMicro)
+                        .foregroundStyle(Color.oAccent)
+                    Text(prompt.name)
+                        .font(.oMicro)
+                        .foregroundStyle(Color.oTextSecondary)
+                        .lineLimit(1)
+                    Button {
+                        viewModel.clearActivePrompt()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Color.oTextTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+            }
         }
         .padding(.horizontal, OSpacing.md)
         .padding(.vertical, OSpacing.xs)
@@ -513,7 +540,7 @@ private struct ModelPickerView: View {
                 } else {
                     ForEach(prompts) { template in
                         Button {
-                            viewModel.assistantInput = template.body
+                            viewModel.setActivePrompt(id: template.id, name: template.name, body: template.body)
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(template.name)

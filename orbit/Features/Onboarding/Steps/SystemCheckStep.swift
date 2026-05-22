@@ -4,36 +4,42 @@ struct SystemCheckStep: View {
     var viewModel: OnboardingViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: OSpacing.lg) {
-            VStack(alignment: .leading, spacing: OSpacing.xs) {
-                Text("System Check")
-                    .font(.oTitle1)
-                    .foregroundStyle(Color.oTextPrimary)
+        HStack(alignment: .top, spacing: OSpacing.xl) {
+            VStack(alignment: .leading, spacing: OSpacing.lg) {
+                VStack(alignment: .leading, spacing: OSpacing.xs) {
+                    Text("System Check")
+                        .font(.oTitle1)
+                        .foregroundStyle(Color.oTextPrimary)
 
-                Text("Checking that your Mac is ready for Orbit…")
-                    .font(.oBody)
-                    .foregroundStyle(Color.oTextSecondary)
-            }
-
-            VStack(spacing: OSpacing.xs) {
-                ForEach(viewModel.checkItems) { item in
-                    checkRow(item)
-                }
-            }
-
-            if viewModel.checksDone {
-                HStack(spacing: OSpacing.xs) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.oSuccessGreen)
-                        .font(.system(size: 13))
-                    Text("Your Mac is ready.")
-                        .font(.oCaption)
+                    Text("Checking that your Mac is ready for Orbit…")
+                        .font(.oBody)
                         .foregroundStyle(Color.oTextSecondary)
                 }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+
+                VStack(spacing: OSpacing.xs) {
+                    ForEach(viewModel.checkItems) { item in
+                        checkRow(item)
+                    }
+                }
+
+                if viewModel.checksDone {
+                    HStack(spacing: OSpacing.xs) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Color.oSuccessGreen)
+                            .font(.system(size: 13))
+                        Text("Your Mac is ready.")
+                            .font(.oCaption)
+                            .foregroundStyle(Color.oTextSecondary)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
             }
 
-            Spacer(minLength: OSpacing.md)
+            Spacer()
+
+            CharacterPoseView(poseName: "Exploring")
+                .accessibilityHidden(true)
+                .padding(.top, OSpacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, OSpacing.md)

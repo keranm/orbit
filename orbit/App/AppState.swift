@@ -29,7 +29,10 @@ final class AppState {
     var novaState: NovaState = .idle
 
     /// Owned runtime manager. Drives runtimeStatus and Nova state.
-    let runtimeManager = RuntimeManager()
+    let runtimeManager: RuntimeManager
+
+    /// Mobile Access coordinator — owns all mobile services lifecycle.
+    let mobileAccessCoordinator: MobileAccessCoordinator
 
     /// Current runtime status, derived from runtimeManager.
     var runtimeStatus: RuntimeStatus { runtimeManager.status }
@@ -44,14 +47,32 @@ final class AppState {
     /// Persisted CodeViewModel so context survives navigation switches.
     var codeViewModel = CodeViewModel()
 
-    /// When non-nil, the next view to mount should inject this prompt content.
-    var pendingPromptForCode: String?
+    /// When non-nil, the next view to mount should inject this prompt as chat text (NewChatView).
+    var pendingChatPrompt: String?
+
+    /// When non-nil, the next Code screen mount should use this as the active prompt.
+    var pendingCodePrompt: PendingCodePrompt?
 
     /// Shared reference for components that need the active model ref but
     /// can't hold an injected AppState (e.g. NovaOverlayViewController).
     static weak var current: AppState?
 
+    struct PendingCodePrompt {
+        let id: UUID
+        let name: String
+        let body: String
+    }
+
     // hasCompletedOnboarding is persisted via @AppStorage in MainWindowView — not stored here.
+
+    init() {
+        let rm = RuntimeManager()
+        runtimeManager = rm
+        mobileAccessCoordinator = MobileAccessCoordinator(
+            runtimeManager: rm,
+            chatService: ChatService(apiPort: rm.apiPort)
+        )
+    }
 }
 
 // MARK: - RuntimeStatus

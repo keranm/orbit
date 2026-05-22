@@ -517,7 +517,6 @@ private struct RemoveMeshLLMSheet: View {
         phase = .removing
 
         // Capture @MainActor values before entering the detached task.
-        let currentStatus = appState.runtimeStatus
         let binaryURL = appState.runtimeManager.binaryPath
 
         Task {

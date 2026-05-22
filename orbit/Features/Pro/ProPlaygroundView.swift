@@ -4,6 +4,7 @@ struct ProPlaygroundView: View {
     @Environment(AppState.self) private var appState
     @State private var viewModel = PlaygroundViewModel()
     @State private var runDetailsTab = "Run Details"
+    @State private var showModelPicker = false
 
     private let runDetailsTabs = ["Run Details", "Metrics", "Logs"]
 
@@ -24,8 +25,20 @@ struct ProPlaygroundView: View {
         }
         .background(Color.oBackground)
         .onAppear {
-            viewModel.modelRef = appState.runtimeManager.activeModelRef ?? ""
+            if viewModel.modelRef.isEmpty {
+                viewModel.modelRef = appState.runtimeManager.activeModelRef ?? ""
+            }
         }
+        .onDisappear {
+            viewModel.stop()
+        }
+        .sheet(isPresented: $showModelPicker) {
+            modelPickerSheet
+        }
+    }
+
+    private var canRun: Bool {
+        appState.runtimeManager.status == .ready && !viewModel.modelRef.isEmpty
     }
 
     // MARK: - Page Header
@@ -55,40 +68,34 @@ struct ProPlaygroundView: View {
             .overlay(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
 
             Button { } label: { Image(systemName: "ellipsis").foregroundStyle(Color.oTextSecondary) }.buttonStyle(.plain)
-
-            Button { } label: {
-                HStack(spacing: OSpacing.xs) {
-                    Image(systemName: "square.and.arrow.down")
-                    Text("Save")
+                .contextMenu {
+                    Button("Clear Chat") { viewModel.clear() }
                 }
-                .font(.oBodyMedium)
-                .foregroundStyle(Color.oTextPrimary)
-                .padding(.horizontal, OSpacing.sm)
-                .padding(.vertical, OSpacing.xs)
-                .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oSurface))
-                .overlay(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
-            }
-            .buttonStyle(.plain)
 
-            Button { viewModel.send() } label: {
+            Button {
+                if viewModel.isStreaming {
+                    viewModel.stop()
+                } else {
+                    viewModel.send()
+                }
+            } label: {
                 HStack(spacing: OSpacing.xs) {
-                    Image(systemName: "play.fill").font(.system(size: 12))
-                    Text("New Run")
+                    Image(systemName: viewModel.isStreaming ? "stop.fill" : "play.fill")
+                        .font(.system(size: 12))
+                    Text(viewModel.isStreaming ? "Stop" : "New Run")
                 }
                 .font(.oBodyMedium)
                 .foregroundStyle(.white)
                 .padding(.horizontal, OSpacing.sm)
                 .padding(.vertical, OSpacing.xs)
-                .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oAccent))
+                .background(
+                    RoundedRectangle(cornerRadius: ORadius.md)
+                        .fill(viewModel.isStreaming ? Color.oWarningAmber : Color.oAccent)
+                )
             }
             .buttonStyle(.plain)
+            .disabled(!canRun)
 
-            Button { } label: {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.oTextSecondary)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, OSpacing.md)
         .padding(.vertical, OSpacing.sm)
@@ -121,34 +128,78 @@ struct ProPlaygroundView: View {
     }
 
     private var modelCard: some View {
-        HStack(spacing: OSpacing.sm) {
-            Image(systemName: "cpu")
-                .font(.system(size: 16))
-                .foregroundStyle(Color.oAccent)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: OSpacing.xs) {
-                    Text(viewModel.modelRef.isEmpty ? "No model" : viewModel.modelRef)
-                        .font(.oBodyMedium)
-                        .foregroundStyle(Color.oTextPrimary)
-                    Text("Local")
-                        .font(.oMicro)
-                        .foregroundStyle(Color.oSuccessGreen)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(Capsule().fill(Color.oSuccessGreen.opacity(0.12)))
+        Button {
+            showModelPicker = true
+        } label: {
+            HStack(spacing: OSpacing.sm) {
+                Image(systemName: "cpu")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.oAccent)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: OSpacing.xs) {
+                        Text(viewModel.modelRef.isEmpty ? "No model" : viewModel.modelRef)
+                            .font(.oBodyMedium)
+                            .foregroundStyle(Color.oTextPrimary)
+                            .lineLimit(1)
+                        Text("Local")
+                            .font(.oMicro)
+                            .foregroundStyle(Color.oSuccessGreen)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Capsule().fill(Color.oSuccessGreen.opacity(0.12)))
+                    }
+                    Text(appState.runtimeStatus.diagnosticsLabel)
+                        .font(.oCaption)
+                        .foregroundStyle(Color.oTextSecondary)
                 }
-                Text(appState.runtimeStatus.diagnosticsLabel)
-                    .font(.oCaption)
-                    .foregroundStyle(Color.oTextSecondary)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.oTextTertiary)
             }
-            Spacer()
-            Image(systemName: "chevron.down")
-                .font(.system(size: 11))
-                .foregroundStyle(Color.oTextTertiary)
+            .padding(OSpacing.sm)
+            .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oSurface))
+            .overlay(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
         }
-        .padding(OSpacing.sm)
-        .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oSurface))
-        .overlay(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
+        .buttonStyle(.plain)
+    }
+
+    private var modelPickerSheet: some View {
+        let models = appState.runtimeManager.installedModels
+        return NavigationStack {
+            List {
+                ForEach(models, id: \.name) { model in
+                    Button {
+                        viewModel.modelRef = model.name
+                        showModelPicker = false
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.displayName)
+                                    .font(.oBodyMedium)
+                                    .foregroundStyle(Color.oTextPrimary)
+                                Text(model.name)
+                                    .font(.oCaption)
+                                    .foregroundStyle(Color.oTextTertiary)
+                            }
+                            Spacer()
+                            if viewModel.modelRef == model.name {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(Color.oAccent)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .navigationTitle("Select Model")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showModelPicker = false }
+                }
+            }
+        }
+        .frame(width: 360, height: 300)
     }
 
     private var systemPromptEditor: some View {
@@ -180,49 +231,25 @@ struct ProPlaygroundView: View {
         VStack(spacing: OSpacing.md) {
             HStack {
                 Spacer()
-                Button("Reset") {
-                    viewModel.temperature = 0.7; viewModel.topP = 0.95
-                    viewModel.maxTokens = 4096; viewModel.frequencyPenalty = 0.0; viewModel.presencePenalty = 0.0
-                }
+                Button("Reset") { viewModel.resetParameters() }
                 .buttonStyle(.plain)
                 .font(.oCaptionMed)
                 .foregroundStyle(Color.oAccent)
             }
-            paramSlider("Temperature", value: $viewModel.temperature, range: 0...2, display: String(format: "%.1f", viewModel.temperature),
-                        tooltip: "Controls randomness — lower values produce more predictable responses.")
-            paramSlider("Top P", value: $viewModel.topP, range: 0...1, display: String(format: "%.2f", viewModel.topP),
-                        tooltip: "Nucleus sampling — only tokens within the top probability mass are considered.")
-            paramSlider("Max Tokens", value: Binding(get: { Double(viewModel.maxTokens) }, set: { viewModel.maxTokens = Int($0) }), range: 1...32768, display: "\(viewModel.maxTokens)",
-                        tooltip: "Maximum number of tokens the model can generate in a single response.")
-            paramSlider("Frequency Penalty", value: $viewModel.frequencyPenalty, range: -2...2, display: String(format: "%.1f", viewModel.frequencyPenalty),
-                        tooltip: "Reduces repetition by penalising tokens that have already appeared.")
-            paramSlider("Presence Penalty", value: $viewModel.presencePenalty, range: -2...2, display: String(format: "%.1f", viewModel.presencePenalty),
-                        tooltip: "Encourages the model to introduce new topics by penalising used tokens.")
+            paramSlider("Temperature", value: $viewModel.temperature, range: 0...2, display: String(format: "%.1f", viewModel.temperature))
+            paramSlider("Top P", value: $viewModel.topP, range: 0...1, display: String(format: "%.2f", viewModel.topP))
+            paramSlider("Max Tokens", value: Binding(get: { Double(viewModel.maxTokens) }, set: { viewModel.maxTokens = Int($0) }), range: 1...32768, display: "\(viewModel.maxTokens)")
+            paramSlider("Frequency Penalty", value: $viewModel.frequencyPenalty, range: -2...2, display: String(format: "%.1f", viewModel.frequencyPenalty))
+            paramSlider("Presence Penalty", value: $viewModel.presencePenalty, range: -2...2, display: String(format: "%.1f", viewModel.presencePenalty))
         }
     }
 
-    private func paramSlider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, display: String, tooltip: String) -> some View {
+    private func paramSlider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, display: String) -> some View {
         VStack(spacing: 4) {
             HStack(spacing: OSpacing.xs) {
                 Text(label)
                     .font(.oBody)
                     .foregroundStyle(Color.oTextPrimary)
-                Button {
-                    // tooltip popover
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.oTextTertiary)
-                }
-                .buttonStyle(.plain)
-                .help(tooltip)
-                .popover(isPresented: .constant(false)) {
-                    Text(tooltip)
-                        .font(.oCaption)
-                        .foregroundStyle(Color.oTextPrimary)
-                        .padding(OSpacing.sm)
-                        .frame(width: 200)
-                }
                 Spacer()
                 Text(display)
                     .font(.oBodyMedium)
@@ -239,31 +266,10 @@ struct ProPlaygroundView: View {
     private var chatPanel: some View {
         VStack(spacing: 0) {
             HStack {
-                HStack(spacing: OSpacing.xs) {
-                    Text("Untitled Chat")
-                        .font(.oBodyMedium)
-                        .foregroundStyle(Color.oTextPrimary)
-                    Button { } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.oTextTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
+                Text("Untitled Chat")
+                    .font(.oBodyMedium)
+                    .foregroundStyle(Color.oTextPrimary)
                 Spacer()
-                Button { } label: {
-                    HStack(spacing: OSpacing.xs) {
-                        Image(systemName: "plus")
-                        Text("Add Message")
-                    }
-                    .font(.oCaptionMed)
-                    .foregroundStyle(Color.oTextSecondary)
-                    .padding(.horizontal, OSpacing.sm)
-                    .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
-                    .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
-                }
-                .buttonStyle(.plain)
             }
             .padding(OSpacing.sm)
             .background(Color.oSurface)
@@ -337,12 +343,13 @@ struct ProPlaygroundView: View {
                 .foregroundStyle(Color.oTextPrimary)
                 .textSelection(.enabled)
 
-            if msg.role == "assistant", !viewModel.isStreaming, let tc = viewModel.lastTokenCount {
+                if msg.role == "assistant", !viewModel.isStreaming, let tc = viewModel.lastTokenCount {
                 HStack(spacing: OSpacing.sm) {
-                    Button { } label: { Image(systemName: "doc.on.doc").font(.system(size: 11)).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
-                    Button { } label: { Image(systemName: "hand.thumbsup").font(.system(size: 11)).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
-                    Button { } label: { Image(systemName: "hand.thumbsdown").font(.system(size: 11)).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
-                    Button { } label: { Image(systemName: "ellipsis").font(.system(size: 11)).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
+                    Button { NSPasteboard.general.setString(msg.content, forType: .string) } label: { Image(systemName: "doc.on.doc").font(.system(size: 11)).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Copy") { NSPasteboard.general.setString(msg.content, forType: .string) }
+                            Button("Select All") { }
+                        }
                     Spacer()
                     let lat = viewModel.lastLatency.map { String(format: "%.1fs", $0) } ?? ""
                     Text("\(lat) · \(tc) tokens")
@@ -355,12 +362,6 @@ struct ProPlaygroundView: View {
 
     private var chatComposer: some View {
         HStack(spacing: OSpacing.sm) {
-            HStack(spacing: OSpacing.sm) {
-                Button { } label: { Text("@").font(.oBodyMedium).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
-                Button { } label: { Image(systemName: "paperclip").font(.system(size: 13)).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
-                Button { } label: { Image(systemName: "square.grid.2x2").font(.system(size: 13)).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
-                Button { } label: { Text("{x}").font(.oCaption).foregroundStyle(Color.oTextTertiary) }.buttonStyle(.plain)
-            }
             TextField("Ask anything…", text: $viewModel.currentInput)
                 .textFieldStyle(.plain)
                 .font(.oBody)
@@ -593,16 +594,9 @@ struct ProPlaygroundView: View {
             : "This response used the mesh (\(state.statusLabel))."
 
         return VStack(alignment: .leading, spacing: OSpacing.sm) {
-            HStack {
-                Text("MESH ROUTE")
-                    .font(.oMicro)
-                    .foregroundStyle(Color.oTextTertiary)
-                Spacer()
-                Button("View Map") {}
-                    .buttonStyle(.plain)
-                    .font(.oCaptionMed)
-                    .foregroundStyle(Color.oAccent)
-            }
+            Text("MESH ROUTE")
+                .font(.oMicro)
+                .foregroundStyle(Color.oTextTertiary)
             HStack(spacing: OSpacing.xs) {
                 Image(systemName: "sparkle")
                     .font(.system(size: 11))

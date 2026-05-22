@@ -15,7 +15,6 @@ struct MeshSection: View {
     @State private var isDiscovering = false
     @State private var discoverError: String?
     @State private var pendingPublicJoin: DiscoveredMesh?
-    @State private var showPublicConsent = false
     @State private var joinError: String?
     @State private var isJoining = false
 
@@ -44,10 +43,8 @@ struct MeshSection: View {
                 errorCard(msg)
             }
         }
-        .sheet(isPresented: $showPublicConsent) {
-            if let mesh = pendingPublicJoin {
-                publicConsentSheet(mesh: mesh)
-            }
+        .sheet(item: $pendingPublicJoin) { mesh in
+            publicConsentSheet(mesh: mesh)
         }
     }
 
@@ -277,7 +274,6 @@ struct MeshSection: View {
             Spacer()
             Button("Join") {
                 pendingPublicJoin = mesh
-                showPublicConsent = true
             }
             .buttonStyle(.plain)
             .font(.oCaptionMed)
@@ -415,7 +411,7 @@ struct MeshSection: View {
                     .font(.oTitle2)
                     .foregroundStyle(Color.oTextPrimary)
                 Spacer()
-                Button { showPublicConsent = false } label: {
+                Button { pendingPublicJoin = nil } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.oTextSecondary)
@@ -461,7 +457,7 @@ struct MeshSection: View {
             )
 
             HStack {
-                Button("Cancel") { showPublicConsent = false }
+                Button("Cancel") { pendingPublicJoin = nil }
                     .buttonStyle(.plain)
                     .font(.oBody)
                     .foregroundStyle(Color.oTextSecondary)
@@ -469,7 +465,7 @@ struct MeshSection: View {
                 Spacer()
 
                 Button("I understand — join mesh") {
-                    showPublicConsent = false
+                    pendingPublicJoin = nil
                     Task {
                         await joinPublic(mesh)
                     }

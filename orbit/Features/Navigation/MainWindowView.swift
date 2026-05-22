@@ -52,11 +52,14 @@ struct MainWindowView: View {
     }
 
     private var proShell: some View {
-        VStack(spacing: 0) {
-            ProNavStrip()
-            Divider()
+        ZStack(alignment: .top) {
             contentZStack
+                .padding(.top, 25)
+            ProNavStrip()
+                .padding(.top, 5)
         }
+        .ignoresSafeArea(edges: .top)
+        .background(Color.oBackground)
     }
 
     private var contentZStack: some View {
@@ -75,6 +78,25 @@ struct MainWindowView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: novaVisible)
         .background(Color.oBackground)
+        .overlay(alignment: .top) {
+            if let msg = appState.runtimeManager.meshFallbackMessage {
+                MeshFallbackBanner(message: msg) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        appState.runtimeManager.clearMeshFallbackMessage()
+                    }
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .onAppear {
+                    Task {
+                        try? await Task.sleep(for: .seconds(5))
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            appState.runtimeManager.clearMeshFallbackMessage()
+                        }
+                    }
+                }
+            }
+        }
+        .animation(.spring(duration: 0.3), value: appState.runtimeManager.meshFallbackMessage != nil)
     }
 
     /// Nova is an emotional presence for chat and absent from all other screens.
@@ -122,6 +144,44 @@ struct MainWindowView: View {
         case .playground:
             ProPlaygroundView()
         }
+    }
+}
+
+// MARK: - Mesh fallback banner
+
+private struct MeshFallbackBanner: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: OSpacing.sm) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.oWarningAmber)
+            Text(message)
+                .font(.oCaptionMed)
+                .foregroundStyle(Color.oTextPrimary)
+            Spacer()
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.oTextTertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, OSpacing.md)
+        .padding(.vertical, OSpacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: ORadius.md)
+                .fill(Color.oSurface)
+                .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ORadius.md)
+                        .stroke(Color.oWarningAmber.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, OSpacing.xl)
+        .padding(.top, OSpacing.lg)
     }
 }
 

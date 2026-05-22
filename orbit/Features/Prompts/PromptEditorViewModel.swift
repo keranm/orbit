@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @Observable
 @MainActor
@@ -25,6 +26,7 @@ final class PromptEditorViewModel {
     var testCreativity: Double = 0.3
     var testConciseness: Double = 0.7
     var testTemperature: Double = 0.7
+    var testMaxTokens: Int = 4096
 
     // Variable substitution
     var variableValues: [String: String] = [:]
@@ -51,7 +53,7 @@ final class PromptEditorViewModel {
 
     var bodySectionHeaders: [(title: String, range: Range<String.Index>)] {
         var headers: [(String, Range<String.Index>)] = []
-        for match in editedBody.matches(of: try! Regex("^([A-Z_]{2,}:)").dotMatchesNewlines()) {
+        for _ in editedBody.matches(of: try! Regex("^([A-Z_]{2,}:)").dotMatchesNewlines()) {
             // Approximate: just find lines matching ALL_CAPS: pattern
         }
         // Simple line-by-line approach
@@ -117,10 +119,43 @@ final class PromptEditorViewModel {
 
     // MARK: - Test
 
-    func runTest() async {
+    func runTest(chatService: ChatServiceProtocol, modelRef: String, modelContext: ModelContext) async {
         isTesting = true
-        testOutput = renderedPreview
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        testOutput = ""
+        let message = ChatRequestMessage(role: "user", content: renderedPreview)
+        let startedAt = Date()
+        var fullContent = ""
+        var completionTokens = 0
+        do {
+            for try await event in chatService.streamCompletion(
+                messages: [message],
+                model: modelRef,
+                systemPrompt: "",
+                temperature: testTemperature,
+                topP: nil,
+                maxTokens: testMaxTokens,
+                frequencyPenalty: nil,
+                presencePenalty: nil
+            ) {
+                switch event {
+                case .token(let text):
+                    fullContent += text
+                    testOutput = fullContent
+                case .done(_, let compTokens):
+                    completionTokens = compTokens ?? 0
+                }
+            }
+            let latency = Date().timeIntervalSince(startedAt)
+            let record = PromptRunRecord(templateID: template.id)
+            record.tokenCount = completionTokens
+            record.latency = latency
+            record.wasSuccess = true
+            modelContext.insert(record)
+            template.usageCount += 1
+            try? modelContext.save()
+        } catch {
+            testOutput = "Error: \(error.localizedDescription)"
+        }
         isTesting = false
     }
 

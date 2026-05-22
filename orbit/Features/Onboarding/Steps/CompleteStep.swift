@@ -8,15 +8,9 @@ struct CompleteStep: View {
         VStack(spacing: OSpacing.xl) {
             Spacer(minLength: OSpacing.md)
 
-            // Success mark
-            ZStack {
-                Circle()
-                    .fill(Color.oSuccessGreen.opacity(0.1))
-                    .frame(width: 72, height: 72)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.oSuccessGreen)
-            }
+            // Nova — celebrating with confetti
+            CharacterPoseView(poseName: "Celebrating", showConfetti: true)
+                .accessibilityHidden(true)
 
             // Heading
             VStack(spacing: OSpacing.sm) {

@@ -8,6 +8,24 @@ struct ProDashboardView: View {
     @State private var recentRuns: [PromptRunRecord] = []
     @State private var currentCPU: Double = 0
     @State private var pollTask: Task<Void, Never>?
+    @State private var showActivitySheet = false
+    @State private var selectedTimeRange: TimeRange = .last24h
+
+    enum TimeRange: String, CaseIterable {
+        case last24h = "Last 24 Hours"
+        case last7d = "Last 7 Days"
+        case last30d = "Last 30 Days"
+
+        var dateThreshold: Date {
+            let seconds: TimeInterval
+            switch self {
+            case .last24h: seconds = 86400
+            case .last7d:  seconds = 604800
+            case .last30d: seconds = 2592000
+            }
+            return Date.now.addingTimeInterval(-seconds)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +55,9 @@ struct ProDashboardView: View {
             ProStatusBar(dashboardVariant: true)
         }
         .background(Color.oBackground)
+        .sheet(isPresented: $showActivitySheet) {
+            activitySheet
+        }
         .onAppear {
             pollSystemResources()
             fetchRecentRuns()
@@ -58,7 +79,9 @@ struct ProDashboardView: View {
     }
 
     private func fetchRecentRuns() {
+        let threshold = selectedTimeRange.dateThreshold
         let descriptor = FetchDescriptor<PromptRunRecord>(
+            predicate: #Predicate { $0.runAt >= threshold },
             sortBy: [SortDescriptor(\.runAt, order: .reverse)]
         )
         recentRuns = (try? modelContext.fetch(descriptor)) ?? []
@@ -82,10 +105,25 @@ struct ProDashboardView: View {
                     .foregroundStyle(Color.oTextSecondary)
             }
             Spacer()
-            Menu("Last 24 Hours") {}
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .font(.oBody)
+            Menu {
+                ForEach(TimeRange.allCases, id: \.rawValue) { range in
+                    Button(range.rawValue) {
+                        selectedTimeRange = range
+                        fetchRecentRuns()
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(selectedTimeRange.rawValue)
+                        .font(.oBody)
+                        .foregroundStyle(Color.oTextPrimary)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.oTextTertiary)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
             HStack(spacing: OSpacing.xs) {
                 Circle()
                     .fill(meshDotColor)
@@ -102,12 +140,6 @@ struct ProDashboardView: View {
             .padding(.horizontal, OSpacing.sm)
             .padding(.vertical, OSpacing.xs)
             .background(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
-            Button { } label: {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.oTextSecondary)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, OSpacing.md)
         .padding(.vertical, OSpacing.md)
@@ -131,8 +163,6 @@ struct ProDashboardView: View {
             metricTile("Local First",
                        value: localShare.map { String(format: "%.0f%%", $0 * 100) } ?? "—",
                        unit: "of requests", source: localShare != nil ? .live : .unavailable)
-            metricTile("Total Savings",
-                       value: "—", unit: "estimated", source: .unavailable)
         }
     }
 
@@ -348,36 +378,36 @@ struct ProDashboardView: View {
         )
     }
 
-    // MARK: - Network Traffic Panel (unavailable)
+    // MARK: - Inference Activity Panel
 
     private var networkTrafficPanel: some View {
         VStack(alignment: .leading, spacing: OSpacing.sm) {
             HStack {
-                Text("Network Traffic")
+                Text("Inference Activity")
                     .font(.oBodyMedium)
-                    .foregroundStyle(Color.oTextTertiary)
-                Image(systemName: "info.circle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.oTextTertiary)
+                    .foregroundStyle(Color.oTextPrimary)
                 Spacer()
-            }
-            Text("Mesh-LLM does not expose network throughput data.")
-                .font(.oBody)
-                .foregroundStyle(Color.oTextTertiary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 4) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color.oWarningAmber)
-                Text("Needs Mesh-LLM API enhancement")
+                Text("tokens over time")
                     .font(.oCaption)
-                    .foregroundStyle(Color.oWarningAmber)
+                    .foregroundStyle(Color.oTextTertiary)
             }
+            VStack(spacing: OSpacing.sm) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 28))
+                    .foregroundStyle(Color.oTextTertiary)
+                Text("Token history will appear as you use the chat.")
+                    .font(.oBody)
+                    .foregroundStyle(Color.oTextTertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
         }
         .padding(OSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: ORadius.lg)
-                .fill(Color.oSurface.opacity(0.5))
+                .fill(Color.oSurface)
+                .shadow(color: Color.black.opacity(0.04), radius: 4, y: 1)
         )
         .overlay(RoundedRectangle(cornerRadius: ORadius.lg).stroke(Color.oDivider, lineWidth: 1))
         .frame(maxWidth: .infinity)
@@ -395,7 +425,7 @@ struct ProDashboardView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Color.oTextTertiary)
                 Spacer()
-                Button("Manage") {}
+                Button("Manage") { appState.route = .models }
                     .buttonStyle(.plain)
                     .font(.oCaptionMed)
                     .foregroundStyle(Color.oAccent)
@@ -639,7 +669,7 @@ struct ProDashboardView: View {
                     .font(.oBodyMedium)
                     .foregroundStyle(Color.oTextPrimary)
                 Spacer()
-                Button("View All") {}
+                Button("View All") { showActivitySheet = true }
                     .buttonStyle(.plain)
                     .font(.oCaptionMed)
                     .foregroundStyle(Color.oAccent)
@@ -682,6 +712,48 @@ struct ProDashboardView: View {
         )
         .overlay(RoundedRectangle(cornerRadius: ORadius.lg).stroke(Color.oDivider, lineWidth: 1))
         .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Activity Sheet
+
+    private var activitySheet: some View {
+        NavigationStack {
+            List {
+                if recentRuns.isEmpty {
+                    ContentUnavailableView("No Activity", systemImage: "tray", description: Text("Run prompts to see activity here."))
+                } else {
+                    ForEach(recentRuns, id: \.id) { record in
+                        HStack(spacing: OSpacing.sm) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(record.runAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.oBodyMedium)
+                                    .foregroundStyle(Color.oTextPrimary)
+                                Text("Prompt run")
+                                    .font(.oCaption)
+                                    .foregroundStyle(Color.oTextSecondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(record.tokenCount) tok")
+                                    .font(.oCaptionMed)
+                                    .foregroundStyle(Color.oTextPrimary)
+                                Text(String(format: "%.1fs", record.latency))
+                                    .font(.oCaption)
+                                    .foregroundStyle(Color.oTextTertiary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .navigationTitle("Recent Activity")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showActivitySheet = false }
+                }
+            }
+            .frame(width: 500, height: 400)
+        }
     }
 
     // MARK: - Formatters

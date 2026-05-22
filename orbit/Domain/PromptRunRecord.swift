@@ -4,7 +4,6 @@ import Foundation
 /// Records a single execution of a prompt template for usage analytics.
 @Model
 final class PromptRunRecord {
-    var id: UUID = UUID()
     var templateID: UUID
     var runAt: Date = Date()
     var tokenCount: Int = 0

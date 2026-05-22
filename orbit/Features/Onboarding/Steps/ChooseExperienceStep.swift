@@ -4,26 +4,32 @@ struct ChooseExperienceStep: View {
     var viewModel: OnboardingViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: OSpacing.lg) {
-            VStack(alignment: .leading, spacing: OSpacing.xs) {
-                Text("Choose Your First Model")
-                    .accessibilityIdentifier("step_choose_experience_title")
-                    .font(.oTitle1)
-                    .foregroundStyle(Color.oTextPrimary)
+        HStack(alignment: .top, spacing: OSpacing.xl) {
+            VStack(alignment: .leading, spacing: OSpacing.lg) {
+                VStack(alignment: .leading, spacing: OSpacing.xs) {
+                    Text("Choose Your First Model")
+                        .accessibilityIdentifier("step_choose_experience_title")
+                        .font(.oTitle1)
+                        .foregroundStyle(Color.oTextPrimary)
 
-                Text("Pick a model to get started. You can add more later from the Models screen.")
-                    .font(.oBody)
-                    .foregroundStyle(Color.oTextSecondary)
-                    .lineSpacing(2)
-            }
+                    Text("Pick a model to get started. You can add more later from the Models screen.")
+                        .font(.oBody)
+                        .foregroundStyle(Color.oTextSecondary)
+                        .lineSpacing(2)
+                }
 
-            VStack(spacing: OSpacing.sm) {
-                ForEach(OnboardingViewModel.ExperienceTier.allCases, id: \.self) { tier in
-                    tierCard(tier)
+                VStack(spacing: OSpacing.sm) {
+                    ForEach(OnboardingViewModel.ExperienceTier.allCases, id: \.self) { tier in
+                        tierCard(tier)
+                    }
                 }
             }
 
-            Spacer(minLength: OSpacing.md)
+            Spacer()
+
+            CharacterPoseView(poseName: "Thinking")
+                .accessibilityHidden(true)
+                .padding(.top, OSpacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, OSpacing.md)

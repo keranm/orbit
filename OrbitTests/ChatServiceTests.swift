@@ -216,6 +216,23 @@ final class MockChatService: ChatServiceProtocol {
         model: String,
         systemPrompt: String = ""
     ) -> AsyncThrowingStream<StreamEvent, Error> {
+        stream(messages: messages)
+    }
+
+    func streamCompletion(
+        messages: [ChatRequestMessage],
+        model: String,
+        systemPrompt: String,
+        temperature: Double?,
+        topP: Double?,
+        maxTokens: Int?,
+        frequencyPenalty: Double?,
+        presencePenalty: Double?
+    ) -> AsyncThrowingStream<StreamEvent, Error> {
+        stream(messages: messages)
+    }
+
+    private func stream(messages: [ChatRequestMessage]) -> AsyncThrowingStream<StreamEvent, Error> {
         let tokens = self.tokens
         let error = self.error
         let delay = self.delay

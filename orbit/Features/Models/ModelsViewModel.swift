@@ -163,6 +163,11 @@ final class ModelsViewModel {
 
     // MARK: - Set active model
 
+    /// Selects a mesh-served model. Does not restart the runtime.
+    func selectMeshModel(_ model: MeshModelEntry, rm: RuntimeManager) {
+        rm.selectMeshModel(model)
+    }
+
     func setActiveModel(_ model: InstalledModelEntry, rm: RuntimeManager) async {
         let ref = model.ref ?? model.name
 

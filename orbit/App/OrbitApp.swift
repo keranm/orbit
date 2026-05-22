@@ -43,14 +43,27 @@ struct OrbitApp: App {
                         appState.runtimeManager.enterMockReadyState()
                     } else {
                         await appState.runtimeManager.detectInstall()
-                        // Restore mesh join config from previous session
-                        appState.runtimeManager.restoreMeshConfigIfNeeded()
+                        // Restore mesh join config from previous session.
+                        // This is now async — it sets the config then immediately
+                        // tries to resolve reconnecting → connected if the runtime is up.
+                        await appState.runtimeManager.restoreMeshConfigIfNeeded()
                         // Auto-start: if a model is configured and the runtime
                         // isn't already running, start it immediately. The sidebar
                         // status indicator communicates progress — the user should
                         // never see the "AI is paused" screen on a normal launch.
                         if appState.runtimeManager.status == .offline {
                             Task { await appState.runtimeManager.start() }
+                        }
+                        // Auto-restore Mobile Access if it was enabled before closing.
+                        // Poll until the runtime is ready (up to 60s) then re-enable.
+                        Task {
+                            for _ in 0..<60 {
+                                if case .ready = appState.runtimeManager.status {
+                                    await appState.mobileAccessCoordinator.autoStartIfPreviouslyEnabled()
+                                    return
+                                }
+                                try? await Task.sleep(for: .seconds(1))
+                            }
                         }
                     }
 

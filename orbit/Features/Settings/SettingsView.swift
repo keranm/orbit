@@ -5,25 +5,27 @@ struct SettingsView: View {
     @State private var selectedSection: SettingsSection = .general
 
     enum SettingsSection: String, CaseIterable, Identifiable {
-        case general  = "General"
-        case models   = "Models"
-        case pro      = "Pro"
-        case privacy  = "Privacy"
-        case mesh     = "Mesh"
-        case reset    = "Reset"
-        case about    = "About"
+        case general       = "General"
+        case models        = "Models"
+        case pro           = "Pro"
+        case privacy       = "Privacy"
+        case mesh          = "Mesh"
+        case mobileAccess  = "Mobile Access"
+        case reset         = "Reset"
+        case about         = "About"
 
         var id: String { rawValue }
 
         var icon: String {
             switch self {
-            case .general:  return "gearshape"
-            case .models:   return "square.stack"
-            case .pro:      return "wand.and.stars"
-            case .privacy:  return "lock.shield"
-            case .mesh:     return "network"
-            case .reset:    return "arrow.counterclockwise"
-            case .about:    return "info.circle"
+            case .general:      return "gearshape"
+            case .models:       return "square.stack"
+            case .pro:          return "wand.and.stars"
+            case .privacy:      return "lock.shield"
+            case .mesh:         return "network"
+            case .mobileAccess: return "iphone"
+            case .reset:        return "arrow.counterclockwise"
+            case .about:        return "info.circle"
             }
         }
     }
@@ -116,13 +118,14 @@ struct SettingsView: View {
                     .padding(.bottom, OSpacing.md)
 
                 switch selectedSection {
-                case .general:  GeneralSection()
-                case .models:   ModelsSection()
-                case .pro:      ProSection()
-                case .privacy:  PrivacySection()
-                case .mesh:     MeshSection()
-                case .reset:    ResetSection()
-                case .about:    AboutSection()
+                case .general:      GeneralSection()
+                case .models:       ModelsSection()
+                case .pro:          ProSection()
+                case .privacy:      PrivacySection()
+                case .mesh:         MeshSection()
+                case .mobileAccess: MobileAccessSection()
+                case .reset:        ResetSection()
+                case .about:        AboutSection()
                 }
 
                 Spacer(minLength: OSpacing.xl)

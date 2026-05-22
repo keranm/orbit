@@ -138,7 +138,12 @@ struct SidebarView: View {
 
     private var statusDotColor: Color {
         switch appState.runtimeStatus {
-        case .ready:                                        return Color.oSuccessGreen
+        case .ready:
+            switch appState.runtimeManager.meshConnectionState {
+            case .connectedPublic:  return Color.oWarningAmber
+            case .connectedPrivate: return Color.oMeshTeal
+            default:                return Color.oSuccessGreen
+            }
         case .starting:                                     return Color.oWarningAmber
         case .offline, .error:                              return Color.oWarningAmber
         case .notInstalled, .noModelConfigured, .stopping:  return Color.oTextTertiary
@@ -147,7 +152,15 @@ struct SidebarView: View {
 
     private var statusLabel: String {
         switch appState.runtimeStatus {
-        case .ready:             return "Ready locally"
+        case .ready:
+            if appState.runtimeManager.activeMeshModel != nil {
+                switch appState.runtimeManager.meshConnectionState {
+                case .connectedPublic:  return "Active on shared mesh"
+                case .connectedPrivate: return "Active on your mesh"
+                default:                break
+                }
+            }
+            return "Ready locally"
         case .starting:          return "Starting…"
         case .offline:           return "AI paused"
         case .stopping:          return "Stopping…"

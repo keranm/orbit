@@ -107,18 +107,8 @@ enum ChatError: LocalizedError {
 // MARK: - Protocol for testability
 
 protocol ChatServiceProtocol: Sendable {
-    /// Stream a chat completion.
-    /// - Parameters:
-    ///   - messages:     Full conversation history in oldest-first order.
-    ///   - model:        Model ref to use.
-    ///   - systemPrompt: Optional system message prepended before the history.
-    func streamCompletion(
-        messages: [ChatRequestMessage],
-        model: String,
-        systemPrompt: String
-    ) -> AsyncThrowingStream<StreamEvent, Error>
-
-    /// Stream a chat completion with optional inference parameters.
+    /// Stream a chat completion with full inference parameters.
+    /// All optional parameters default to nil (server chooses defaults).
     func streamCompletion(
         messages: [ChatRequestMessage],
         model: String,
@@ -132,18 +122,17 @@ protocol ChatServiceProtocol: Sendable {
 }
 
 extension ChatServiceProtocol {
-    /// Default: ignore advanced parameters, delegate to the basic method.
+    /// Convenience — calls the full method with all optional params set to nil.
     func streamCompletion(
         messages: [ChatRequestMessage],
         model: String,
-        systemPrompt: String,
-        temperature: Double? = nil,
-        topP: Double? = nil,
-        maxTokens: Int? = nil,
-        frequencyPenalty: Double? = nil,
-        presencePenalty: Double? = nil
+        systemPrompt: String = ""
     ) -> AsyncThrowingStream<StreamEvent, Error> {
-        streamCompletion(messages: messages, model: model, systemPrompt: systemPrompt)
+        streamCompletion(
+            messages: messages, model: model, systemPrompt: systemPrompt,
+            temperature: nil, topP: nil, maxTokens: nil,
+            frequencyPenalty: nil, presencePenalty: nil
+        )
     }
 }
 
@@ -170,7 +159,6 @@ final class ChatService: ChatServiceProtocol {
         _stream(messages: messages, model: model, systemPrompt: systemPrompt)
     }
 
-    /// Public entry point used by Pro Playground — forwards all inference parameters.
     func streamCompletion(
         messages: [ChatRequestMessage],
         model: String,

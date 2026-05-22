@@ -115,15 +115,10 @@ struct PromptsView: View {
                     .foregroundStyle(Color.oTextPrimary)
 
                 if let tip = tooltip {
-                    Button {
-                        // Tooltip shown on hover via accessibilityHint
-                    } label: {
-                        Image(systemName: "questionmark.circle")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.oTextTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(tip)
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.oTextTertiary)
+                        .help(tip)
                 }
             }
 

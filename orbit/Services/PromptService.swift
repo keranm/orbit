@@ -3,7 +3,8 @@ import Foundation
 
 // MARK: - Protocol
 
-protocol PromptServiceProtocol: Sendable {
+@MainActor
+protocol PromptServiceProtocol {
     func fetchAll() async throws -> [PromptTemplate]
     func fetch(id: UUID) async throws -> PromptTemplate?
     func save(_ template: PromptTemplate) async throws
@@ -40,7 +41,9 @@ final class PromptService: PromptServiceProtocol {
 
     func save(_ template: PromptTemplate) async throws {
         let context = ModelContext(container)
-        context.insert(template)
+        if template.modelContext == nil {
+            context.insert(template)
+        }
         try context.save()
     }
 

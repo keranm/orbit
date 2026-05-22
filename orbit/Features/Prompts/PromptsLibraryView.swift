@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 // MARK: - Library
 
@@ -12,6 +13,14 @@ struct PromptsLibraryView: View {
     @State private var editingTemplate: PromptTemplate?
     @State private var showDeleteConfirmation = false
     @State private var templateToDelete: PromptTemplate?
+    @State private var showImporter = false
+    @State private var importError: String?
+    @State private var showModelPickerFor: PromptTemplate?
+    @State private var addingTagFor: PromptTemplate?
+    @State private var newTagText = ""
+    @AppStorage("promptsViewMode") private var viewMode: ViewMode = .list
+
+    enum ViewMode: String { case list, grid }
 
     var body: some View {
         Group {
@@ -42,6 +51,22 @@ struct PromptsLibraryView: View {
             }
         } message: { template in
             Text("Are you sure you want to delete \"\(template.name)\"? This cannot be undone.")
+        }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+            switch result {
+            case .success(let url):
+                importPrompts(from: url)
+            case .failure:
+                importError = "Could not open the selected file."
+            }
+        }
+        .alert("Import Error", isPresented: .init(get: { importError != nil }, set: { _ in importError = nil })) {
+            Button("OK") { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
+        .sheet(item: $showModelPickerFor) { template in
+            modelPickerSheet(for: template)
         }
     }
 
@@ -102,7 +127,7 @@ struct PromptsLibraryView: View {
             }
             .buttonStyle(.plain)
 
-            Button {  } label: {
+            Button { showImporter = true } label: {
                 HStack(spacing: OSpacing.xs) {
                     Image(systemName: "square.and.arrow.down").font(.system(size: 12))
                     Text("Import").font(.oBodyMedium)
@@ -112,11 +137,6 @@ struct PromptsLibraryView: View {
                 .padding(.vertical, 7)
                 .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oSurface))
                 .overlay(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
-            }
-            .buttonStyle(.plain)
-
-            Button {  } label: {
-                Image(systemName: "ellipsis").foregroundStyle(Color.oTextSecondary)
             }
             .buttonStyle(.plain)
         }
@@ -182,15 +202,18 @@ struct PromptsLibraryView: View {
             .fixedSize()
 
             HStack(spacing: 0) {
-                Button {  } label: {
-                    Image(systemName: "list.bullet").font(.system(size: 13)).foregroundStyle(Color.oAccent)
+                Button { viewMode = .list } label: {
+                    Image(systemName: "list.bullet").font(.system(size: 13))
+                        .foregroundStyle(viewMode == .list ? Color.oAccent : Color.oTextSecondary)
                         .padding(.horizontal, OSpacing.sm).padding(.vertical, OSpacing.xs)
-                        .background(Color.oAccentSoft)
+                        .background(viewMode == .list ? Color.oAccentSoft : Color.clear)
                 }
                 .buttonStyle(.plain)
-                Button {  } label: {
-                    Image(systemName: "square.grid.2x2").font(.system(size: 13)).foregroundStyle(Color.oTextSecondary)
+                Button { viewMode = .grid } label: {
+                    Image(systemName: "square.grid.2x2").font(.system(size: 13))
+                        .foregroundStyle(viewMode == .grid ? Color.oAccent : Color.oTextSecondary)
                         .padding(.horizontal, OSpacing.sm).padding(.vertical, OSpacing.xs)
+                        .background(viewMode == .grid ? Color.oAccentSoft : Color.clear)
                 }
                 .buttonStyle(.plain)
             }
@@ -311,11 +334,13 @@ struct PromptsLibraryView: View {
 
                 Menu {
                     Button("Use in Code Assistant") {
-                        appState.pendingPromptForCode = template.body
+                        appState.pendingCodePrompt = AppState.PendingCodePrompt(
+                            id: template.id, name: template.name, body: template.body
+                        )
                         appState.route = .coding
                     }
                     Button("Use in Chat") {
-                        appState.pendingPromptForCode = template.body
+                        appState.pendingChatPrompt = template.body
                         appState.route = .newChat
                     }
                     Divider()
@@ -350,19 +375,6 @@ struct PromptsLibraryView: View {
             Text("\(vm.filteredTemplates.count) prompt\(vm.filteredTemplates.count == 1 ? "" : "s")")
                 .font(.oCaption).foregroundStyle(Color.oTextSecondary)
             Spacer()
-            HStack(spacing: OSpacing.sm) {
-                Button {  } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 12)).foregroundStyle(Color.oTextTertiary)
-                }
-                .buttonStyle(.plain)
-                Text("1").font(.oCaptionMed).foregroundStyle(Color.oTextPrimary)
-                    .padding(.horizontal, OSpacing.sm).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oAccentSoft))
-                Button {  } label: {
-                    Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(Color.oTextTertiary)
-                }
-                .buttonStyle(.plain)
-            }
         }
         .padding(.horizontal, OSpacing.lg)
         .padding(.vertical, OSpacing.sm)
@@ -486,11 +498,6 @@ struct PromptsLibraryView: View {
             .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oAccent))
             .frame(maxWidth: .infinity)
 
-            Button {  } label: {
-                Image(systemName: "bookmark").font(.system(size: 14)).foregroundStyle(Color.oTextSecondary)
-                    .padding(OSpacing.xs)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, OSpacing.md)
         .padding(.vertical, OSpacing.sm)
@@ -517,7 +524,15 @@ struct PromptsLibraryView: View {
     }
 
     private func detailOverviewContent(_ template: PromptTemplate, vm: PromptsLibraryViewModel) -> some View {
-        VStack(alignment: .leading, spacing: OSpacing.lg) {
+        let allRecords = (try? modelContext.fetch(FetchDescriptor<PromptRunRecord>(sortBy: [SortDescriptor(\.runAt, order: .reverse)]))) ?? []
+        let records = allRecords.filter { $0.templateID == template.id }
+        let successCount = records.filter(\.wasSuccess).count
+        let successRate: String = {
+            guard !records.isEmpty else { return "—" }
+            return "\(Int(Double(successCount) / Double(records.count) * 100))%"
+        }()
+        let lastRun = records.first
+        return VStack(alignment: .leading, spacing: OSpacing.lg) {
             infoSection("Description") {
                 Text(template.templateDescription.isEmpty ? "No description" : template.templateDescription)
                     .font(.oBody).foregroundStyle(Color.oTextSecondary)
@@ -526,7 +541,7 @@ struct PromptsLibraryView: View {
                 HStack {
                     Text(template.modelAssociation ?? "No model set").font(.oBody).foregroundStyle(Color.oTextPrimary)
                     Spacer()
-                    Button("Change") {}
+                    Button("Change") { showModelPickerFor = template }
                         .buttonStyle(.plain).font(.oCaptionMed).foregroundStyle(Color.oAccent)
                         .padding(.horizontal, OSpacing.sm).padding(.vertical, 3)
                         .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurface))
@@ -541,13 +556,34 @@ struct PromptsLibraryView: View {
                     if template.tags.isEmpty {
                         Text("No tags").font(.oCaption).foregroundStyle(Color.oTextTertiary)
                     }
-                    Button {  } label: {
+                    Button { addingTagFor = template; newTagText = "" } label: {
                         Image(systemName: "plus").font(.system(size: 10)).foregroundStyle(Color.oTextTertiary)
                             .padding(4)
                             .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
                             .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
                     }
                     .buttonStyle(.plain)
+                    .popover(isPresented: .init(get: { addingTagFor?.id == template.id }, set: { if !$0 { addingTagFor = nil } })) {
+                        HStack(spacing: OSpacing.xs) {
+                            TextField("Tag name…", text: $newTagText)
+                                .textFieldStyle(.plain)
+                                .font(.oCaption)
+                                .frame(width: 120)
+                            Button("Add") {
+                                let tag = newTagText.trimmingCharacters(in: .whitespaces)
+                                if !tag.isEmpty, !template.tags.contains(tag) {
+                                    template.tags.append(tag)
+                                    try? modelContext.save()
+                                }
+                                addingTagFor = nil
+                                newTagText = ""
+                            }
+                            .buttonStyle(.plain)
+                            .font(.oCaptionMed)
+                            .foregroundStyle(Color.oAccent)
+                        }
+                        .padding(OSpacing.sm)
+                    }
                 }
             }
             VStack(alignment: .leading, spacing: OSpacing.sm) {
@@ -567,21 +603,28 @@ struct PromptsLibraryView: View {
             VStack(alignment: .leading, spacing: OSpacing.sm) {
                 Text("Usage").font(.oBodyMedium).foregroundStyle(Color.oTextPrimary)
                 HStack(spacing: OSpacing.md) {
-                    statTile("Total Runs", "\(template.usageCount)")
-                    statTile("Success Rate", "—")
+                    statTile("Total Runs", "\(records.count)")
+                    statTile("Success Rate", successRate)
                     statTile("Version", "v\(template.version)")
                 }
-                let chartPoints = Array((0..<24).map { _ in CGFloat.random(in: 0...30) })
-                placeholderUsageChart(data: chartPoints)
+                placeholderUsageChart(data: records.isEmpty ? Array(repeating: 0, count: 24) : records.prefix(24).map { _ in CGFloat.random(in: 0...30) })
                     .frame(height: 120)
             }
             VStack(alignment: .leading, spacing: OSpacing.xs) {
                 HStack {
                     Text("Last Run").font(.oBodyMedium).foregroundStyle(Color.oTextPrimary)
                     Spacer()
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.oTextTertiary).frame(width: 6, height: 6)
-                        Text("No runs yet").font(.oCaptionMed).foregroundStyle(Color.oTextTertiary)
+                    if let run = lastRun {
+                        HStack(spacing: 4) {
+                            Circle().fill(run.wasSuccess ? Color.oMeshTeal : Color.oWarningAmber).frame(width: 6, height: 6)
+                            Text("\(run.runAt.formatted(date: .abbreviated, time: .shortened)) · \(run.latency < 1 ? "\(Int(run.latency * 1000))ms" : String(format: "%.1fs", run.latency)) · \(run.tokenCount) tokens")
+                                .font(.oCaptionMed).foregroundStyle(Color.oTextTertiary)
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.oTextTertiary).frame(width: 6, height: 6)
+                            Text("No runs yet").font(.oCaptionMed).foregroundStyle(Color.oTextTertiary)
+                        }
                     }
                 }
             }
@@ -746,6 +789,93 @@ struct PromptsLibraryView: View {
                          at: CGPoint(x: x, y: h + 4), anchor: .top)
             }
         }
+    }
+
+    // MARK: - Import
+
+    private struct ImportPrompt: Codable {
+        var name: String
+        var description: String?
+        var body: String?
+        var tags: [String]?
+        var modelAssociation: String?
+    }
+
+    private func importPrompts(from url: URL) {
+        guard url.startAccessingSecurityScopedResource() else {
+            importError = "Could not access the selected file."
+            return
+        }
+        defer { url.stopAccessingSecurityScopedResource() }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            let imported: [ImportPrompt]
+
+            if let single = try? decoder.decode(ImportPrompt.self, from: data) {
+                imported = [single]
+            } else {
+                imported = try decoder.decode([ImportPrompt].self, from: data)
+            }
+
+            for p in imported {
+                let template = PromptTemplate(
+                    name: p.name,
+                    description: p.description ?? "",
+                    tags: p.tags ?? [],
+                    body: p.body ?? "",
+                    modelAssociation: p.modelAssociation
+                )
+                modelContext.insert(template)
+            }
+            try modelContext.save()
+            Task { await viewModel?.onAppear() }
+        } catch {
+            importError = "Could not import prompts: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Model Picker
+
+    private func modelPickerSheet(for template: PromptTemplate) -> some View {
+        let models = appState.runtimeManager.installedModels
+        return NavigationStack {
+            List {
+                Button("Any Model (use default)") {
+                    template.modelAssociation = nil
+                    try? modelContext.save()
+                    showModelPickerFor = nil
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(template.modelAssociation == nil ? Color.oAccent : Color.oTextPrimary)
+                if template.modelAssociation == nil {
+                    Image(systemName: "checkmark").foregroundStyle(Color.oAccent)
+                }
+                ForEach(models, id: \.name) { model in
+                    HStack {
+                        Button(model.displayName) {
+                            template.modelAssociation = model.name
+                            try? modelContext.save()
+                            showModelPickerFor = nil
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(template.modelAssociation == model.name ? Color.oAccent : Color.oTextPrimary)
+                        Spacer()
+                        if template.modelAssociation == model.name {
+                            Image(systemName: "checkmark").foregroundStyle(Color.oAccent)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Select Model")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showModelPickerFor = nil }
+                }
+            }
+        }
+        .frame(width: 360, height: 300)
     }
 
     private func iconName(for template: PromptTemplate) -> String {

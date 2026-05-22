@@ -47,7 +47,10 @@ struct ProStatusBar: View {
             Spacer()
 
             if dashboardVariant {
-                Button("Open Logs") {}
+                Button("Open Logs") {
+                    let logsURL = URL(fileURLWithPath: NSHomeDirectory() + "/.mesh-llm/logs")
+                    NSWorkspace.shared.open(logsURL)
+                }
                     .buttonStyle(.plain)
                     .font(.oMicro)
                     .foregroundStyle(Color.oAccent)

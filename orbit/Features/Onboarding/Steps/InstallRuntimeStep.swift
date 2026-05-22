@@ -4,25 +4,31 @@ struct InstallRuntimeStep: View {
     var viewModel: OnboardingViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: OSpacing.xl) {
-            VStack(alignment: .leading, spacing: OSpacing.xs) {
-                Text("Install Mesh-LLM Runtime")
-                    .font(.oTitle1)
-                    .foregroundStyle(Color.oTextPrimary)
+        HStack(alignment: .top, spacing: OSpacing.xl) {
+            VStack(alignment: .leading, spacing: OSpacing.xl) {
+                VStack(alignment: .leading, spacing: OSpacing.xs) {
+                    Text("Install Mesh-LLM Runtime")
+                        .font(.oTitle1)
+                        .foregroundStyle(Color.oTextPrimary)
 
-                Text("Orbit needs the Mesh-LLM runtime on your Mac. This is a one-time setup.")
-                    .font(.oBody)
-                    .foregroundStyle(Color.oTextSecondary)
-                    .lineSpacing(2)
+                    Text("Orbit needs the Mesh-LLM runtime on your Mac. This is a one-time setup.")
+                        .font(.oBody)
+                        .foregroundStyle(Color.oTextSecondary)
+                        .lineSpacing(2)
+                }
+
+                if let error = viewModel.installError {
+                    errorState(message: error)
+                } else {
+                    progressState
+                }
             }
 
-            if let error = viewModel.installError {
-                errorState(message: error)
-            } else {
-                progressState
-            }
+            Spacer()
 
-            Spacer(minLength: OSpacing.md)
+            CharacterPoseView(poseName: "Working")
+                .accessibilityHidden(true)
+                .padding(.top, OSpacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, OSpacing.md)

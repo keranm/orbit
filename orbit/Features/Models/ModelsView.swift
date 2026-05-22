@@ -315,62 +315,12 @@ struct ModelsView: View {
     }
 
     private func meshModelRow(model: MeshModelEntry, isPublic: Bool) -> some View {
-        HStack(spacing: OSpacing.md) {
-            ZStack {
-                RoundedRectangle(cornerRadius: ORadius.sm)
-                    .fill(isPublic ? Color.oWarningAmber.opacity(0.12) : Color.oMeshTeal.opacity(0.12))
-                    .frame(width: 34, height: 34)
-                Image(systemName: "cpu")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: OSpacing.xs) {
-                    Text(model.shortName)
-                        .font(.oBodyMedium)
-                        .foregroundStyle(Color.oTextPrimary)
-                        .lineLimit(1)
-
-                    // Origin badge
-                    Text(isPublic ? "Shared" : "Your Mesh")
-                        .font(.oMicroMed)
-                        .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
-                        .padding(.horizontal, OSpacing.xs)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(isPublic ? Color.oWarningAmber.opacity(0.10) : Color.oMeshTeal.opacity(0.10)))
-                }
-
-                HStack(spacing: OSpacing.xs) {
-                    if let size = model.sizeGB {
-                        Text(String(format: "%.1f GB", size))
-                            .font(.oCaption)
-                            .foregroundStyle(Color.oTextTertiary)
-                    }
-                    if let nodes = model.nodeCount, nodes > 0 {
-                        Text("·")
-                            .font(.oCaption)
-                            .foregroundStyle(Color.oTextTertiary)
-                        Text("\(nodes) \(nodes == 1 ? "node" : "nodes")")
-                            .font(.oCaption)
-                            .foregroundStyle(Color.oTextTertiary)
-                    }
-                    if let fit = model.fitLabel {
-                        Text("·")
-                            .font(.oCaption)
-                            .foregroundStyle(Color.oTextTertiary)
-                        Text(fit)
-                            .font(.oCaption)
-                            .foregroundStyle(Color.oTextTertiary)
-                            .lineLimit(1)
-                    }
-                }
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, OSpacing.md)
-        .padding(.vertical, OSpacing.sm)
+        MeshModelRow(
+            model: model,
+            isPublic: isPublic,
+            isActive: model.name == appState.activeModelRef,
+            onUse: { viewModel.selectMeshModel(model, rm: appState.runtimeManager) }
+        )
     }
 
     // MARK: - Shared states
@@ -412,6 +362,96 @@ struct ModelsView: View {
     private func isActiveModel(_ model: InstalledModelEntry) -> Bool {
         guard let activeRef = appState.activeModelRef else { return false }
         return (model.ref ?? model.name) == activeRef
+    }
+}
+
+// MARK: - Mesh model row
+
+private struct MeshModelRow: View {
+    let model: MeshModelEntry
+    let isPublic: Bool
+    let isActive: Bool
+    let onUse: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: OSpacing.md) {
+            ZStack {
+                RoundedRectangle(cornerRadius: ORadius.sm)
+                    .fill(isPublic ? Color.oWarningAmber.opacity(0.12) : Color.oMeshTeal.opacity(0.12))
+                    .frame(width: 34, height: 34)
+                Image(systemName: "cpu")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: OSpacing.xs) {
+                    Text(model.displayName ?? model.shortName)
+                        .font(.oBodyMedium)
+                        .foregroundStyle(Color.oTextPrimary)
+                        .lineLimit(1)
+
+                    Text(isPublic ? "Shared" : "Your Mesh")
+                        .font(.oMicroMed)
+                        .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
+                        .padding(.horizontal, OSpacing.xs)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(isPublic ? Color.oWarningAmber.opacity(0.10) : Color.oMeshTeal.opacity(0.10)))
+                }
+
+                HStack(spacing: OSpacing.xs) {
+                    if let size = model.sizeGB {
+                        Text(String(format: "%.1f GB", size))
+                            .font(.oCaption)
+                            .foregroundStyle(Color.oTextTertiary)
+                    }
+                    if let nodes = model.nodeCount, nodes > 0 {
+                        Text("·")
+                            .font(.oCaption)
+                            .foregroundStyle(Color.oTextTertiary)
+                        Text("\(nodes) \(nodes == 1 ? "node" : "nodes")")
+                            .font(.oCaption)
+                            .foregroundStyle(Color.oTextTertiary)
+                    }
+                    if let fit = model.fitLabel {
+                        Text("·")
+                            .font(.oCaption)
+                            .foregroundStyle(Color.oTextTertiary)
+                        Text(fit)
+                            .font(.oCaption)
+                            .foregroundStyle(Color.oTextTertiary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Spacer()
+
+            if isActive {
+                Text("Active")
+                    .font(.oMicroMed)
+                    .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
+                    .padding(.horizontal, OSpacing.xs)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(isPublic ? Color.oWarningAmber.opacity(0.12) : Color.oMeshTeal.opacity(0.12)))
+            } else if isHovered {
+                Button("Use") { onUse() }
+                    .buttonStyle(.plain)
+                    .font(.oCaptionMed)
+                    .foregroundStyle(Color.oAccent)
+                    .padding(.horizontal, OSpacing.sm)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oAccent.opacity(0.10)))
+            }
+        }
+        .padding(.horizontal, OSpacing.md)
+        .padding(.vertical, OSpacing.sm)
+        .background(isHovered ? Color.oSurface.opacity(0.6) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: ORadius.md))
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
     }
 }
 

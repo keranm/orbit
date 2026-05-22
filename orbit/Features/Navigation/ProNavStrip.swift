@@ -1,7 +1,22 @@
 import SwiftUI
 
-/// Full-width horizontal icon nav bar rendered in place of the sidebar when Pro mode is active.
 struct ProNavStrip: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: 80)
+            ProNavIcons()
+            Spacer(minLength: 0)
+            ProNavStatus()
+                .padding(.trailing, OSpacing.md)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 20)
+    }
+}
+
+// MARK: - Nav Icons
+
+private struct ProNavIcons: View {
     @Environment(AppState.self) private var appState
     @State private var hoveredRoute: AppRoute?
 
@@ -22,37 +37,11 @@ struct ProNavStrip: View {
     ]
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Nav icons
+        HStack(spacing: 2) {
             ForEach(items, id: \.label) { item in
                 navButton(item)
             }
-
-            Spacer()
-
-            // Runtime status + Pro badge
-            HStack(spacing: OSpacing.sm) {
-                HStack(spacing: OSpacing.xs) {
-                    Circle()
-                        .fill(statusDotColor)
-                        .frame(width: 6, height: 6)
-                    Text(statusLabel)
-                        .font(.oMicro)
-                        .foregroundStyle(Color.oTextSecondary)
-                }
-
-                Text("PRO")
-                    .font(.oMicroMed)
-                    .foregroundStyle(Color.oAccent)
-                    .padding(.horizontal, OSpacing.xs)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.oAccentSoft))
-                    .overlay(Capsule().stroke(Color.oAccent.opacity(0.3), lineWidth: 1))
-            }
-            .padding(.trailing, OSpacing.md)
         }
-        .frame(height: 44)
-        .background(Color.oSurface)
     }
 
     private func navButton(_ item: NavItem) -> some View {
@@ -62,36 +51,52 @@ struct ProNavStrip: View {
         return Button {
             appState.route = item.route
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: item.icon)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(isSelected ? Color.oAccent : Color.oTextSecondary)
-            }
-            .frame(width: 52, height: 44)
-            .background(
-                isSelected ? Color.oAccentSoft :
-                isHovered  ? Color.oSurfaceSecondary : Color.clear
-            )
-            .overlay(alignment: .bottom) {
-                if isSelected {
-                    Rectangle()
-                        .fill(Color.oAccent)
-                        .frame(height: 2)
-                }
-            }
-            .contentShape(Rectangle())
+            Image(systemName: item.icon)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(isSelected ? Color.oAccent : Color.oTextSecondary)
+                .frame(width: 20, height: 20)
+                .background(
+                    isHovered ? Color.oSurfaceSecondary : Color.clear,
+                    in: RoundedRectangle(cornerRadius: ORadius.sm)
+                )
         }
         .buttonStyle(.plain)
         .onHover { over in hoveredRoute = over ? item.route : nil }
         .help(item.label)
     }
 
-    /// True when the active route corresponds to this nav item.
     private func routeMatches(_ route: AppRoute) -> Bool {
         switch (appState.route, route) {
         case (.newChat, .newChat),
-             (.chat,    .newChat):   return true
-        default:                     return appState.route == route
+             (.chat,    .newChat): return true
+        default:                   return appState.route == route
+        }
+    }
+}
+
+// MARK: - Status Badge
+
+private struct ProNavStatus: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        HStack(spacing: OSpacing.sm) {
+            HStack(spacing: OSpacing.xs) {
+                Circle()
+                    .fill(statusDotColor)
+                    .frame(width: 6, height: 6)
+                Text(statusLabel)
+                    .font(.oMicro)
+                    .foregroundStyle(Color.oTextSecondary)
+            }
+
+            Text("PRO")
+                .font(.oMicroMed)
+                .foregroundStyle(Color.oAccent)
+                .padding(.horizontal, OSpacing.xs)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.oAccentSoft))
+                .overlay(Capsule().stroke(Color.oAccent.opacity(0.3), lineWidth: 1))
         }
     }
 

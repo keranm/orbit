@@ -30,8 +30,13 @@ final class PlaygroundViewModel {
     var latencyHistory: [TimeInterval] = []
     var throughputHistory: [Double] = []
 
-    init(chatService: ChatService = ChatService()) {
-        self.chatService = chatService
+    var currentRun: RunMetrics?
+    var runHistory: [RunMetrics] = []
+
+    private var streamTask: Task<Void, Never>?
+
+    init(chatService: ChatService? = nil) {
+        self.chatService = chatService ?? ChatService()
     }
 
     func send() {
@@ -42,14 +47,16 @@ final class PlaygroundViewModel {
         messages.append(userMsg)
         currentInput = ""
         isStreaming = true
-
         resetMetrics()
+
+        let startedAt = Date()
         let startTime = CFAbsoluteTimeGetCurrent()
         let chatMessages = messages.map { ChatRequestMessage(role: $0.role, content: $0.content) }
+        let usedModel = modelRef
 
         let stream = chatService.streamCompletion(
             messages: chatMessages,
-            model: modelRef,
+            model: usedModel,
             systemPrompt: systemPrompt,
             temperature: temperature,
             topP: topP,
@@ -58,7 +65,7 @@ final class PlaygroundViewModel {
             presencePenalty: presencePenalty
         )
 
-        Task {
+        streamTask = Task {
             var fullContent = ""
             do {
                 for try await event in stream {
@@ -77,74 +84,49 @@ final class PlaygroundViewModel {
                             throughputHistory.append(Double(ct) / elapsed)
                         }
                         messages.append(PlaygroundMessage(role: "assistant", content: fullContent))
+                        let metrics = RunMetrics(
+                            modelRef: usedModel,
+                            startedAt: startedAt,
+                            durationSeconds: elapsed,
+                            promptTokens: promptTokens ?? 0,
+                            completionTokens: completionTokens ?? 0,
+                            avgTokensPerSecond: elapsed > 0 ? Double(completionTokens ?? 0) / elapsed : 0,
+                            wasLocal: true
+                        )
+                        currentRun = metrics
+                        runHistory.append(metrics)
+                        if runHistory.count > 10 { runHistory.removeFirst() }
                         isStreaming = false
                     }
                 }
             } catch {
                 isStreaming = false
             }
+            streamTask = nil
         }
     }
 
     func stop() {
+        streamTask?.cancel()
+        streamTask = nil
         isStreaming = false
     }
 
-    func sendCompletion() {
-        let trimmed = currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isStreaming else { return }
-
+    func clear() {
+        streamTask?.cancel()
+        streamTask = nil
         messages.removeAll()
         currentInput = ""
-        isStreaming = true
-
         resetMetrics()
-        let startTime = CFAbsoluteTimeGetCurrent()
-        let chatMessages = [ChatRequestMessage(role: "user", content: trimmed)]
-
-        let stream = chatService.streamCompletion(
-            messages: chatMessages,
-            model: modelRef,
-            systemPrompt: systemPrompt,
-            temperature: temperature,
-            topP: topP,
-            maxTokens: maxTokens,
-            frequencyPenalty: frequencyPenalty,
-            presencePenalty: presencePenalty
-        )
-
-        Task {
-            var fullContent = ""
-            do {
-                for try await event in stream {
-                    switch event {
-                    case .token(let text):
-                        fullContent += text
-                        updateLastMessage(with: fullContent)
-                    case .done(let promptTokens, let completionTokens):
-                        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-                        lastTokenCount = completionTokens
-                        lastPromptTokenCount = promptTokens
-                        lastLatency = elapsed
-                        lastWasLocal = true
-                        if let ct = completionTokens, ct > 0, elapsed > 0 {
-                            latencyHistory.append(elapsed)
-                            throughputHistory.append(Double(ct) / elapsed)
-                        }
-                        messages.append(PlaygroundMessage(role: "assistant", content: fullContent))
-                        isStreaming = false
-                    }
-                }
-            } catch {
-                isStreaming = false
-            }
-        }
+        currentRun = nil
     }
 
-    func clear() {
-        messages.removeAll()
-        currentInput = ""
-        resetMetrics()
+    func resetParameters() {
+        temperature = 0.7
+        topP = 0.95
+        maxTokens = 4096
+        frequencyPenalty = 0.0
+        presencePenalty = 0.0
     }
 
     private func resetMetrics() {
@@ -169,4 +151,15 @@ struct PlaygroundMessage: Identifiable {
     let id = UUID()
     let role: String
     var content: String
+}
+
+struct RunMetrics: Identifiable {
+    let id = UUID()
+    let modelRef: String
+    let startedAt: Date
+    let durationSeconds: Double
+    let promptTokens: Int
+    let completionTokens: Int
+    let avgTokensPerSecond: Double
+    let wasLocal: Bool
 }

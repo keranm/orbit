@@ -4,45 +4,51 @@ struct PreparingStep: View {
     var viewModel: OnboardingViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: OSpacing.lg) {
-            VStack(alignment: .leading, spacing: OSpacing.xs) {
-                Text("Preparing Your AI")
-                    .font(.oTitle1)
-                    .foregroundStyle(Color.oTextPrimary)
-
-                Text("Setting up \(viewModel.selectedTier.displayName) for your first conversation.")
-                    .font(.oBody)
-                    .foregroundStyle(Color.oTextSecondary)
-                    .lineSpacing(2)
-            }
-
-            VStack(spacing: OSpacing.xs) {
-                ForEach(viewModel.prepareItems) { item in
-                    prepareRow(item)
-                }
-            }
-            .padding(OSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: ORadius.lg)
-                    .fill(Color.oSurfaceSecondary)
-            )
-
-            if let error = viewModel.prepareError {
-                errorFooter(message: error)
-            } else if viewModel.prepareDone {
-                HStack(spacing: OSpacing.xs) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.oSuccessGreen)
-                    Text("Your model is ready.")
-                        .font(.oBody)
+        HStack(alignment: .top, spacing: OSpacing.xl) {
+            VStack(alignment: .leading, spacing: OSpacing.lg) {
+                VStack(alignment: .leading, spacing: OSpacing.xs) {
+                    Text("Preparing Your AI")
+                        .font(.oTitle1)
                         .foregroundStyle(Color.oTextPrimary)
+
+                    Text("Setting up \(viewModel.selectedTier.displayName) for your first conversation.")
+                        .font(.oBody)
+                        .foregroundStyle(Color.oTextSecondary)
+                        .lineSpacing(2)
                 }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            } else {
-                startupNote
+
+                VStack(spacing: OSpacing.xs) {
+                    ForEach(viewModel.prepareItems) { item in
+                        prepareRow(item)
+                    }
+                }
+                .padding(OSpacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: ORadius.lg)
+                        .fill(Color.oSurfaceSecondary)
+                )
+
+                if let error = viewModel.prepareError {
+                    errorFooter(message: error)
+                } else if viewModel.prepareDone {
+                    HStack(spacing: OSpacing.xs) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Color.oSuccessGreen)
+                        Text("Your model is ready.")
+                            .font(.oBody)
+                            .foregroundStyle(Color.oTextPrimary)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                } else {
+                    startupNote
+                }
             }
 
-            Spacer(minLength: OSpacing.md)
+            Spacer()
+
+            CharacterPoseView(poseName: "Helping")
+                .accessibilityHidden(true)
+                .padding(.top, OSpacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, OSpacing.md)

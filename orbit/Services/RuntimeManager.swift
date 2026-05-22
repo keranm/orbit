@@ -33,6 +33,17 @@ final class RuntimeManager {
     private(set) var localInviteToken: String?
     /// The launch configuration used for the currently-running process.
     private(set) var currentLaunchConfig: RuntimeLaunchConfiguration = .localOnly
+    /// The local model ref that was active before the user switched to a mesh model.
+    /// Restored automatically if the mesh connection is lost.
+    private(set) var previousLocalModelRef: String?
+    /// Non-nil while a mesh-fallback notification should be shown in the UI.
+    var meshFallbackMessage: String?
+
+    /// Non-nil when `activeModelRef` currently points to a model served by the mesh.
+    var activeMeshModel: MeshModelEntry? {
+        guard let ref = activeModelRef else { return nil }
+        return meshModels.first { $0.name == ref }
+    }
 
     // MARK: - Dashboard metrics
 
@@ -144,6 +155,12 @@ final class RuntimeManager {
                 if !cached.isEmpty { recommendedModels = cached }
             }
             startKeepalive()
+            // If mesh config was restored before detectInstall ran, resolve the reconnecting
+            // state immediately rather than waiting for the first keepalive tick (10s).
+            if currentLaunchConfig.meshMode != .none {
+                await refreshMeshStatus()
+                await refreshMeshModels()
+            }
             return
         }
 
@@ -421,6 +438,10 @@ final class RuntimeManager {
             if let ref = liveRef { activeModelRef = ref }
             status = .ready
             startKeepalive()
+            if currentLaunchConfig.meshMode != .none {
+                await refreshMeshStatus()
+                await refreshMeshModels()
+            }
             return
         }
 
@@ -528,6 +549,7 @@ final class RuntimeManager {
     /// Stops any running process, then restarts with `--join <token>`.
     func joinPrivateMesh(inviteToken: String) async {
         guard !inviteToken.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        meshConnectionState = .connectingPrivate
         await stop()
         currentLaunchConfig = RuntimeLaunchConfiguration(
             modelRef: readModelRefFromConfig(),
@@ -536,7 +558,6 @@ final class RuntimeManager {
             noEnumerateHost: false
         )
         persistMeshConfig(mode: .private, token: inviteToken)
-        meshConnectionState = .connectingPrivate
         await startWithConfig(currentLaunchConfig)
     }
 
@@ -544,6 +565,7 @@ final class RuntimeManager {
     /// Applies `--no-enumerate-host` to reduce hardware information broadcast.
     func joinPublicMesh(inviteToken: String) async {
         guard !inviteToken.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        meshConnectionState = .connectingPublic
         await stop()
         currentLaunchConfig = RuntimeLaunchConfiguration(
             modelRef: readModelRefFromConfig(),
@@ -552,7 +574,6 @@ final class RuntimeManager {
             noEnumerateHost: true   // privacy default for public mesh
         )
         persistMeshConfig(mode: .public, token: inviteToken)
-        meshConnectionState = .connectingPublic
         await startWithConfig(currentLaunchConfig)
     }
 
@@ -565,6 +586,20 @@ final class RuntimeManager {
         meshModels = []
         localInviteToken = nil
         await startWithConfig(currentLaunchConfig)
+    }
+
+    /// Selects a mesh-served model as the active model without restarting the runtime.
+    /// Saves the current local model ref so it can be restored if the mesh is lost.
+    func selectMeshModel(_ model: MeshModelEntry) {
+        guard meshConnectionState.isConnected else { return }
+        if let current = activeModelRef, activeMeshModel == nil {
+            previousLocalModelRef = current
+        }
+        activeModelRef = model.name
+    }
+
+    func clearMeshFallbackMessage() {
+        meshFallbackMessage = nil
     }
 
     /// Refreshes mesh status from the management API.
@@ -584,11 +619,17 @@ final class RuntimeManager {
         case .connectedPublic:
             meshConnectionState = .connectedPublic(peerCount: peerCount)
         case .connectingPrivate:
-            // Still waiting for runtime to be ready — stay in connecting state
             break
         case .connectingPublic:
-            // Still waiting for runtime to be ready — stay in connecting state
             break
+        case .reconnecting:
+            // Management API is reachable — the runtime is up and the join was restored.
+            // Transition to the appropriate connected state based on the persisted config.
+            switch currentLaunchConfig.meshMode {
+            case .private: meshConnectionState = .connectedPrivate(peerCount: peerCount)
+            case .public:  meshConnectionState = .connectedPublic(peerCount: peerCount)
+            case .none:    meshConnectionState = .disconnected
+            }
         default:
             break
         }
@@ -651,7 +692,10 @@ final class RuntimeManager {
     }
 
     /// Restores the last mesh mode on app launch (so state survives Orbit restarts).
-    func restoreMeshConfigIfNeeded() {
+    /// If the management API is already reachable (runtime still running), transitions
+    /// directly to connected state using TCP reachability rather than JSON decode,
+    /// then fetches peer count and mesh models.
+    func restoreMeshConfigIfNeeded() async {
         guard let rawMode = UserDefaults.standard.string(forKey: Self.meshModeKey),
               let mode = MeshMode(rawValue: rawMode),
               mode != .none,
@@ -663,11 +707,20 @@ final class RuntimeManager {
             meshMode: mode,
             noEnumerateHost: mode == .public
         )
+        meshConnectionState = .reconnecting
+
+        // Use TCP reachability rather than JSON decode — if port 3131 answers,
+        // the runtime is up and the previous mesh join is still active.
+        guard await managementClient.isReachable() else { return }
+
         switch mode {
-        case .private: meshConnectionState = .reconnecting
-        case .public:  meshConnectionState = .reconnecting
-        case .none: break
+        case .private: meshConnectionState = .connectedPrivate(peerCount: 0)
+        case .public:  meshConnectionState = .connectedPublic(peerCount: 0)
+        case .none:    break
         }
+        // Now fetch peer count and mesh model list to populate UI details.
+        await refreshMeshStatus()
+        await refreshMeshModels()
     }
 
     // MARK: - Health
@@ -782,7 +835,24 @@ final class RuntimeManager {
             return
         }
 
-        // Phase 2: wait for /readyz (model loaded)
+        // In mesh join mode the runtime routes through the mesh — no local model is
+        // required, so /readyz (which gates on a local model being loaded) will never
+        // return 200. Transition to connected as soon as the HTTP server is up.
+        if currentLaunchConfig.meshMode != .none {
+            if let liveRef = await fetchLiveModelRef() { activeModelRef = liveRef }
+            status = .ready
+            switch currentLaunchConfig.meshMode {
+            case .private: meshConnectionState = .connectedPrivate(peerCount: 0)
+            case .public:  meshConnectionState = .connectedPublic(peerCount: 0)
+            case .none:    break
+            }
+            startKeepalive()
+            await refreshMeshStatus()
+            await refreshMeshModels()
+            return
+        }
+
+        // Phase 2 (local mode only): wait for /readyz (model loaded)
         while Date() < deadline {
             if await client.checkReadiness() {
                 // Sync active model ref from the live API so chat always uses
@@ -791,25 +861,7 @@ final class RuntimeManager {
                     activeModelRef = liveRef
                 }
                 status = .ready
-
-                // Transition mesh connection state as soon as the runtime is ready.
-                // The runtime being up with a --join token means we ARE connected —
-                // peer count is display metadata that updates over time via polling.
-                // Do NOT gate "connected" on peerCount > 0: peers only appear in
-                // /api/status when other nodes send us requests, which may take minutes.
-                switch currentLaunchConfig.meshMode {
-                case .private:
-                    meshConnectionState = .connectedPrivate(peerCount: 0)
-                case .public:
-                    meshConnectionState = .connectedPublic(peerCount: 0)
-                case .none:
-                    break
-                }
-
                 startKeepalive()
-
-                // Immediate management API poll to populate peer count and mesh models.
-                // The keepalive will continue refreshing every 30s thereafter.
                 await refreshMeshStatus()
                 await refreshMeshModels()
                 return
@@ -847,6 +899,20 @@ final class RuntimeManager {
                         let ready = await self.client.checkReadiness()
                         if !ready {
                             guard self.status != .starting, self.status != .stopping else { return }
+                            // If a mesh model was active, fall back to the previous local model.
+                            if let activeRef = self.activeModelRef,
+                               self.meshModels.contains(where: { $0.name == activeRef }) {
+                                self.activeModelRef = self.previousLocalModelRef ?? self.readModelRefFromConfig()
+                                self.previousLocalModelRef = nil
+                                self.meshFallbackMessage = "Mesh connection lost — switched to your local model"
+                            }
+                            // Clear stale mesh join config.
+                            if self.currentLaunchConfig.meshMode != .none {
+                                self.clearMeshConfig()
+                                self.currentLaunchConfig = RuntimeLaunchConfiguration(modelRef: self.readModelRefFromConfig())
+                                self.meshConnectionState = .disconnected
+                                self.meshModels = []
+                            }
                             self.status = .offline
                             return
                         }
@@ -868,6 +934,23 @@ final class RuntimeManager {
     // MARK: - Private — Termination handler (shared)
 
     private func handleTermination(proc: Process, stderr: String) {
+        // If a mesh model was active when the process died, restore the previous local model.
+        // Do this before clearing meshModels so we can still identify mesh refs.
+        if let activeRef = activeModelRef,
+           meshModels.contains(where: { $0.name == activeRef }) {
+            activeModelRef = previousLocalModelRef ?? readModelRefFromConfig()
+            previousLocalModelRef = nil
+            meshFallbackMessage = "Mesh connection lost — switched to your local model"
+        }
+
+        // Clear stale mesh join config so the next launch starts in local mode.
+        if currentLaunchConfig.meshMode != .none {
+            clearMeshConfig()
+            currentLaunchConfig = RuntimeLaunchConfiguration(modelRef: readModelRefFromConfig())
+            meshConnectionState = .disconnected
+            meshModels = []
+        }
+
         if Self.isModelNotFoundError(stderr) {
             activeModelRef = nil
             status = .noModelConfigured

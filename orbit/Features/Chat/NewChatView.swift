@@ -75,8 +75,8 @@ struct NewChatView: View {
             }
         }
         .task {
-            if let prompt = appState.pendingPromptForCode {
-                appState.pendingPromptForCode = nil
+            if let prompt = appState.pendingChatPrompt {
+                appState.pendingChatPrompt = nil
                 composerText = prompt
             }
         }
@@ -309,11 +309,10 @@ struct NewChatView: View {
     // MARK: - Model / context bar
 
     private var activeModelName: String {
-        let installed = appState.runtimeManager.installedModels
+        let rm = appState.runtimeManager
         if let ref = appState.activeModelRef {
-            // The live API returns a short model ID (e.g. "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF")
-            // while installed entries use full path refs ("Qwen/…/file.gguf") or name:stem format.
-            // Match exactly first, then fall back to prefix matching for the short-ID case.
+            // Check local installed models first (exact then prefix match for short IDs).
+            let installed = rm.installedModels
             if let exact = installed.first(where: { ($0.ref ?? $0.name) == ref }) {
                 return exact.displayName
             }
@@ -324,8 +323,14 @@ struct NewChatView: View {
             }) {
                 return prefix.displayName
             }
+            // Check mesh models.
+            if let meshModel = rm.meshModels.first(where: { $0.name == ref }) {
+                return meshModel.displayName ?? meshModel.shortName
+            }
+            // Unknown ref — show the last path component as a fallback.
+            return ref.components(separatedBy: "/").last ?? ref
         }
-        return installed.first?.displayName ?? "No model selected"
+        return rm.installedModels.first?.displayName ?? "No model selected"
     }
 
     private var modelContextBar: some View {

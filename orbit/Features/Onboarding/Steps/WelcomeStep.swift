@@ -28,10 +28,10 @@ struct WelcomeStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: OSpacing.xl) {
 
-            // Nova — centred, ambient
+            // Nova — welcoming pose
             HStack {
                 Spacer()
-                NovaView(state: .idle, size: 72)
+                CharacterPoseView(poseName: "Welcome")
                     .accessibilityHidden(true)
                 Spacer()
             }

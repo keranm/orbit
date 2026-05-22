@@ -6,14 +6,21 @@ struct PromptEditorView: View {
     let template: PromptTemplate
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
     @State private var viewModel: PromptEditorViewModel?
     @State private var activeTab = "Editor"
     @State private var rightTab = "Test"
     @State private var showAdvanced = false
-    @State private var noteText = ""
+    @State private var noteText: String
     @State private var editedName: String
     @State private var editedBody: String
     @State private var hasUnsavedChanges = false
+    @State private var showRaw = false
+    @State private var newVarName = ""
+    @State private var newVarDefault = ""
+    @State private var showAddVariable = false
+    @State private var addingTag = false
+    @State private var newEditorTag = ""
 
     // Test inputs
     @State private var topicInput = "AI-powered meeting assistant"
@@ -29,6 +36,7 @@ struct PromptEditorView: View {
     init(onBack: @escaping () -> Void, template: PromptTemplate) {
         self.onBack = onBack
         self.template = template
+        _noteText = State(initialValue: template.notes)
         _editedName = State(initialValue: template.name)
         _editedBody = State(initialValue: template.body)
     }
@@ -101,10 +109,10 @@ struct PromptEditorView: View {
             .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oSurface))
             .overlay(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
 
-            headerBtn("Compare", icon: "arrow.left.arrow.right")
             headerBtn("Save", icon: "square.and.arrow.down") {
                 template.name = editedName
                 template.body = editedBody
+                template.notes = noteText
                 template.updatedAt = .now
                 try? modelContext.save()
                 hasUnsavedChanges = false
@@ -114,26 +122,34 @@ struct PromptEditorView: View {
                 Image(systemName: "ellipsis").foregroundStyle(Color.oTextSecondary)
             }
             .buttonStyle(.plain)
-
-            HStack(spacing: 0) {
-                Button {  } label: {
-                    HStack(spacing: OSpacing.xs) {
-                        Image(systemName: "sparkle").font(.system(size: 12))
-                        Text("Test Prompt").font(.oBodyMedium)
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, OSpacing.md).padding(.vertical, 7)
+            .contextMenu {
+                Button("Save As New Version") {
+                    guard let vm = viewModel else { return }
+                    Task { await vm.saveAsNewVersion() }
                 }
-                .buttonStyle(.plain)
-                Divider().frame(height: 18).overlay(Color.white.opacity(0.3))
-                Button {  } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, OSpacing.sm).padding(.vertical, 7)
-                }
-                .buttonStyle(.plain)
+                Button("Show Version History") { }
             }
-            .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oAccent))
+
+            Button {
+                guard let vm = viewModel, let modelRef = appState.activeModelRef else { return }
+                Task {
+                    await vm.runTest(
+                        chatService: ChatService(),
+                        modelRef: modelRef,
+                        modelContext: modelContext
+                    )
+                }
+            } label: {
+                HStack(spacing: OSpacing.xs) {
+                    Image(systemName: "sparkle").font(.system(size: 12))
+                    Text("Test Prompt").font(.oBodyMedium)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, OSpacing.md).padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oAccent))
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel?.isTesting == true)
         }
         .padding(.horizontal, OSpacing.lg)
         .padding(.vertical, OSpacing.sm)
@@ -165,13 +181,29 @@ struct PromptEditorView: View {
             if template.tags.isEmpty {
                 Text("No tags").font(.oCaptionMed).foregroundStyle(Color.oTextTertiary)
             }
-            Button {  } label: {
+            Button { addingTag = true; newEditorTag = "" } label: {
                 Image(systemName: "plus").font(.system(size: 10)).foregroundStyle(Color.oTextTertiary)
                     .padding(4)
                     .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
                     .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
             }
             .buttonStyle(.plain)
+            .popover(isPresented: $addingTag) {
+                HStack(spacing: OSpacing.xs) {
+                    TextField("Tag…", text: $newEditorTag)
+                        .textFieldStyle(.plain).font(.oCaption).frame(width: 100)
+                    Button("Add") {
+                        let tag = newEditorTag.trimmingCharacters(in: .whitespaces)
+                        if !tag.isEmpty, !template.tags.contains(tag) {
+                            template.tags.append(tag)
+                            try? modelContext.save()
+                        }
+                        addingTag = false
+                        newEditorTag = ""
+                    }.buttonStyle(.plain).font(.oCaptionMed).foregroundStyle(Color.oAccent)
+                }
+                .padding(OSpacing.sm)
+            }
 
             Spacer()
 
@@ -218,7 +250,6 @@ struct PromptEditorView: View {
                     HStack {
                         Text("VARIABLES (\(template.variables.count))").font(.oMicro).foregroundStyle(Color.oTextTertiary)
                         Spacer()
-                        Button("Reorder") {}.buttonStyle(.plain).font(.oMicro).foregroundStyle(Color.oAccent)
                     }
 
                     if template.variables.isEmpty {
@@ -248,7 +279,7 @@ struct PromptEditorView: View {
                         }
                     }
 
-                    Button {  } label: {
+                    Button { showAddVariable = true; newVarName = ""; newVarDefault = "" } label: {
                         HStack(spacing: OSpacing.xs) {
                             Image(systemName: "plus").font(.system(size: 11))
                             Text("Add Variable").font(.oCaption)
@@ -260,38 +291,40 @@ struct PromptEditorView: View {
                         .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
                     }
                     .buttonStyle(.plain)
+                    .popover(isPresented: $showAddVariable) {
+                        VStack(alignment: .leading, spacing: OSpacing.sm) {
+                            Text("Add Variable").font(.oBodyMedium).foregroundStyle(Color.oTextPrimary)
+                            TextField("Variable name", text: $newVarName)
+                                .textFieldStyle(.plain).font(.oCaption)
+                                .padding(OSpacing.xs)
+                                .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
+                                .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
+                            TextField("Default value (optional)", text: $newVarDefault)
+                                .textFieldStyle(.plain).font(.oCaption)
+                                .padding(OSpacing.xs)
+                                .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
+                                .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
+                            HStack {
+                                Spacer()
+                                Button("Cancel") { showAddVariable = false }.buttonStyle(.plain).font(.oCaptionMed).foregroundStyle(Color.oTextSecondary)
+                                Button("Add") {
+                                    let name = newVarName.trimmingCharacters(in: .whitespaces)
+                                    if !name.isEmpty {
+                                        let variable = PromptVariable(name: name, defaultValue: newVarDefault)
+                                        variable.template = template
+                                        template.variables.append(variable)
+                                        modelContext.insert(variable)
+                                        try? modelContext.save()
+                                    }
+                                    showAddVariable = false
+                                }.buttonStyle(.plain).font(.oCaptionMed).foregroundStyle(Color.oAccent)
+                            }
+                        }
+                        .padding(OSpacing.md)
+                        .frame(width: 240)
+                    }
                 }
 
-                VStack(alignment: .leading, spacing: OSpacing.sm) {
-                    HStack {
-                        Text("SNIPPETS").font(.oMicro).foregroundStyle(Color.oTextTertiary)
-                        Spacer()
-                        Button("Manage") {}.buttonStyle(.plain).font(.oMicro).foregroundStyle(Color.oAccent)
-                    }
-                    let snippets = ["Market Analysis Framework", "SWOT Template", "RICE Scoring Model", "Go-to-Market Checklist"]
-                    ForEach(snippets, id: \.self) { snippet in
-                        HStack(spacing: OSpacing.sm) {
-                            Image(systemName: "text.quote")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.oTextTertiary)
-                                .frame(width: 16)
-                            Text(snippet).font(.oCaption).foregroundStyle(Color.oTextPrimary).lineLimit(1)
-                        }
-                        .padding(.vertical, 3)
-                    }
-                    Button {  } label: {
-                        HStack(spacing: OSpacing.xs) {
-                            Image(systemName: "plus").font(.system(size: 11))
-                            Text("New Snippet").font(.oCaption)
-                        }
-                        .foregroundStyle(Color.oTextSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, OSpacing.xs)
-                        .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
-                        .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             .padding(OSpacing.md)
         }
@@ -305,15 +338,9 @@ struct PromptEditorView: View {
             HStack {
                 Text("PROMPT TEMPLATE").font(.oMicro).foregroundStyle(Color.oTextTertiary)
                 Spacer()
-                Button {  } label: {
-                    HStack(spacing: 3) {
-                        Text("Insert").font(.oCaption).foregroundStyle(Color.oTextSecondary)
-                        Image(systemName: "chevron.down").font(.system(size: 9)).foregroundStyle(Color.oTextTertiary)
-                    }
+                if showRaw {
+                    Text("RAW").font(.oMicro).foregroundStyle(Color.oAccent)
                 }
-                .buttonStyle(.plain)
-                Button {  } label: { Image(systemName: "speaker.wave.2").font(.system(size: 12)).foregroundStyle(Color.oTextSecondary) }.buttonStyle(.plain)
-                Button {  } label: { Image(systemName: "chevron.left.forwardslash.chevron.right").font(.system(size: 12)).foregroundStyle(Color.oTextSecondary) }.buttonStyle(.plain)
             }
             .padding(.horizontal, OSpacing.md)
             .padding(.vertical, OSpacing.xs)
@@ -321,24 +348,34 @@ struct PromptEditorView: View {
             Divider()
 
             ScrollView {
-                TextEditor(text: $editedBody)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Color.oTextPrimary)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 400)
-                    .padding(.horizontal, OSpacing.md)
-                    .padding(.vertical, OSpacing.sm)
-                    .onChange(of: editedBody) { _, _ in hasUnsavedChanges = true }
-                    .overlay(alignment: .topLeading) {
-                        if editedBody.isEmpty {
-                            Text("Write your prompt template…\nUse {{variable}} for dynamic values.")
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundStyle(Color.oTextTertiary)
-                                .padding(.horizontal, OSpacing.md)
-                                .padding(.vertical, OSpacing.sm + 8)
-                                .allowsHitTesting(false)
+                if showRaw {
+                    Text(editedBody)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Color.oTextPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, OSpacing.md)
+                        .padding(.vertical, OSpacing.sm)
+                        .textSelection(.enabled)
+                } else {
+                    TextEditor(text: $editedBody)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Color.oTextPrimary)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 400)
+                        .padding(.horizontal, OSpacing.md)
+                        .padding(.vertical, OSpacing.sm)
+                        .onChange(of: editedBody) { _, _ in hasUnsavedChanges = true }
+                        .overlay(alignment: .topLeading) {
+                            if editedBody.isEmpty {
+                                Text("Write your prompt template…\nUse {{variable}} for dynamic values.")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(Color.oTextTertiary)
+                                    .padding(.horizontal, OSpacing.md)
+                                    .padding(.vertical, OSpacing.sm + 8)
+                                    .allowsHitTesting(false)
+                            }
                         }
-                    }
+                }
             }
             .background(Color.oSurface)
 
@@ -355,7 +392,7 @@ struct PromptEditorView: View {
                     Text("Lint").font(.oMicro).foregroundStyle(Color.oTextSecondary)
                     Image(systemName: "checkmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.oSuccessGreen)
                 }
-                Button("</> View raw") {}.buttonStyle(.plain).font(.oMicro).foregroundStyle(Color.oTextSecondary)
+                Button("</> View raw") { showRaw.toggle() }.buttonStyle(.plain).font(.oMicro).foregroundStyle(showRaw ? Color.oAccent : Color.oTextSecondary)
             }
             .padding(.horizontal, OSpacing.md)
             .padding(.vertical, 5)
@@ -485,22 +522,14 @@ struct PromptEditorView: View {
             }
 
             settingSlider("Temperature", value: Binding(
-                get: { 0.7 },
-                set: { _ in }
-            ), range: 0...2, display: "0.7")
+                get: { viewModel?.testTemperature ?? 0.7 },
+                set: { viewModel?.testTemperature = $0 }
+            ), range: 0...2, display: String(format: "%.1f", viewModel?.testTemperature ?? 0.7))
 
             settingSlider("Max Tokens", value: Binding(
-                get: { 4096 },
-                set: { _ in }
-            ), range: 1...32768, display: "4096")
-
-            Button {  } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Color.oTextTertiary)
-                    Text("Advanced").font(.oCaption).foregroundStyle(Color.oTextSecondary)
-                }
-            }
-            .buttonStyle(.plain)
+                get: { Double(viewModel?.testMaxTokens ?? 4096) },
+                set: { viewModel?.testMaxTokens = Int($0) }
+            ), range: 1...32768, display: "\(viewModel?.testMaxTokens ?? 4096)")
         }
     }
 
@@ -517,21 +546,42 @@ struct PromptEditorView: View {
             HStack {
                 Text("TEST OUTPUT").font(.oMicro).foregroundStyle(Color.oTextTertiary)
                 Spacer()
-                Button("Generate") {}.buttonStyle(.plain).font(.oCaptionMed).foregroundStyle(Color.oAccent)
-                Text("—").font(.oMicro).foregroundStyle(Color.oTextTertiary)
+                Button("Generate") {
+                    guard let vm = viewModel, let modelRef = appState.activeModelRef else { return }
+                    Task {
+                        await vm.runTest(
+                            chatService: ChatService(),
+                            modelRef: modelRef,
+                            modelContext: modelContext
+                        )
+                    }
+                }.buttonStyle(.plain).font(.oCaptionMed).foregroundStyle(Color.oAccent)
+                    .disabled(viewModel?.isTesting == true)
                 HStack(spacing: 3) {
-                    Circle().fill(Color.oTextTertiary).frame(width: 5, height: 5)
-                    Text("Idle").font(.oMicro).foregroundStyle(Color.oTextTertiary)
+                    Circle().fill(viewModel?.isTesting == true ? Color.oWarningAmber : Color.oTextTertiary).frame(width: 5, height: 5)
+                    Text(viewModel?.isTesting == true ? "Running…" : "Idle").font(.oMicro).foregroundStyle(Color.oTextTertiary)
                 }
             }
-            VStack(alignment: .leading, spacing: OSpacing.xs) {
-                Text("Press \"Test Prompt\" to generate a response")
-                    .font(.oBody).foregroundStyle(Color.oTextTertiary)
+            let output = viewModel?.testOutput ?? ""
+            if output.isEmpty {
+                VStack(alignment: .leading, spacing: OSpacing.xs) {
+                    Text(viewModel?.isTesting == true ? "Generating…" : "Press \"Test Prompt\" or \"Generate\" to start")
+                        .font(.oBody).foregroundStyle(Color.oTextTertiary)
+                }
+                .padding(OSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
+                .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
+            } else {
+                Text(output)
+                    .font(.oBody)
+                    .foregroundStyle(Color.oTextPrimary)
+                    .textSelection(.enabled)
+                    .padding(OSpacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
+                    .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
             }
-            .padding(OSpacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: ORadius.sm).fill(Color.oSurfaceSecondary))
-            .overlay(RoundedRectangle(cornerRadius: ORadius.sm).stroke(Color.oDivider))
         }
     }
 

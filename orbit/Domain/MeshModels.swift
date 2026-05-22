@@ -93,16 +93,21 @@ struct RuntimeLaunchConfiguration: Equatable {
     /// Hide GPU name, hostname, VRAM from peers — recommended default for public mesh.
     var noEnumerateHost: Bool = false
 
-    /// Builds the argument array for `mesh-llm serve`.
+    /// Builds the argument array for launching mesh-llm.
+    /// Normal startup uses `serve --headless`; joining a mesh uses root-level
+    /// `--join <token>` without the `serve` subcommand, matching the CLI's own
+    /// recommended syntax (`mesh-llm --join <token>`).
     func buildArguments() -> [String] {
-        var args = ["serve", "--headless"]
+        // When joining a mesh, --join is a root-level flag — omit `serve`.
+        // When starting normally, `serve` is the confirmed entrypoint.
+        var args: [String] = joinToken != nil ? ["--headless"] : ["serve", "--headless"]
 
         // Model ref
         if let ref = modelRef {
             args += ["--model", ref]
         }
 
-        // Mesh join token (can repeat; we use single join for now)
+        // Mesh join token
         if let token = joinToken {
             args += ["--join", token]
         }
@@ -287,7 +292,7 @@ struct DiscoveredMesh: Identifiable, Equatable {
     let clientCount: Int?
     let totalVRAMGB: Int?
 
-    var displayName: String { name.isEmpty ? "Unnamed mesh" : name }
+    var displayName: String { isUnnamed ? "Unnamed mesh" : name }
 
     var isUnnamed: Bool { name.isEmpty || name == "(unnamed)" }
 
