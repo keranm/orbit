@@ -49,9 +49,8 @@ final class OrbitUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Prompts"].waitForExistence(timeout: 3))
     }
 
-    func test_sidebar_does_not_contain_playground() {
-        let playground = app.buttons["Playground"]
-        XCTAssertFalse(playground.exists)
+    func test_sidebar_contains_explore() {
+        XCTAssertTrue(app.buttons["Explore"].waitForExistence(timeout: 3))
     }
 
     // MARK: - Navigation + Screenshots

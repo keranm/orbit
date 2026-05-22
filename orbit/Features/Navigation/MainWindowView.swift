@@ -31,16 +31,7 @@ struct MainWindowView: View {
 
     // MARK: - Main app shell
 
-    @ViewBuilder
     private var appShell: some View {
-        if appState.isProMode {
-            proShell
-        } else {
-            normalShell
-        }
-    }
-
-    private var normalShell: some View {
         NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
@@ -49,17 +40,6 @@ struct MainWindowView: View {
                 .ignoresSafeArea(edges: .top)
         }
         .navigationSplitViewStyle(.balanced)
-    }
-
-    private var proShell: some View {
-        ZStack(alignment: .top) {
-            contentZStack
-                .padding(.top, 25)
-            ProNavStrip()
-                .padding(.top, 5)
-        }
-        .ignoresSafeArea(edges: .top)
-        .background(Color.oBackground)
     }
 
     private var contentZStack: some View {
@@ -103,8 +83,7 @@ struct MainWindowView: View {
     private var novaVisible: Bool {
         switch appState.route {
         case .newChat, .chat: return true
-        case .prompts, .models, .settings: return false
-        case .dashboard, .coding, .playground: return false
+        case .explore, .prompts, .models, .settings: return false
         }
     }
 
@@ -127,22 +106,14 @@ struct MainWindowView: View {
             NewChatView()
         case .chat(let id):
             ChatViewLoader(chatID: id)
+        case .explore:
+            ExploreView()
         case .prompts:
-            if appState.isProMode {
-                PromptsLibraryView()
-            } else {
-                PromptsView()
-            }
+            PromptsView()
         case .models:
             ModelsView()
         case .settings:
             SettingsView()
-        case .dashboard:
-            ProDashboardView()
-        case .coding:
-            ProCodeView()
-        case .playground:
-            ProPlaygroundView()
         }
     }
 }
@@ -182,31 +153,6 @@ private struct MeshFallbackBanner: View {
         )
         .padding(.horizontal, OSpacing.xl)
         .padding(.top, OSpacing.lg)
-    }
-}
-
-// MARK: - Placeholder
-
-private struct ProPlaceholderView: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(spacing: OSpacing.sm) {
-            Image(systemName: "hammer.fill")
-                .font(.system(size: 32))
-                .foregroundStyle(Color.oTextTertiary)
-
-            Text(title)
-                .font(.oTitle2)
-                .foregroundStyle(Color.oTextPrimary)
-
-            Text(subtitle)
-                .font(.oBody)
-                .foregroundStyle(Color.oTextTertiary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.oBackground)
     }
 }
 

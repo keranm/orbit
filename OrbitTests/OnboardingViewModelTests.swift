@@ -113,20 +113,19 @@ final class OnboardingViewModelTests: XCTestCase {
 
     // MARK: - Experience tiers
 
-    func test_experienceTier_allCasesHasFour() {
-        XCTAssertEqual(OnboardingViewModel.ExperienceTier.allCases.count, 4)
+    func test_experienceTier_allCasesHasThree() {
+        XCTAssertEqual(OnboardingViewModel.ExperienceTier.allCases.count, 3)
     }
 
     func test_experienceTier_fast_isRecommended() {
         XCTAssertTrue(OnboardingViewModel.ExperienceTier.fast.isRecommended)
         XCTAssertFalse(OnboardingViewModel.ExperienceTier.balanced.isRecommended)
         XCTAssertFalse(OnboardingViewModel.ExperienceTier.advanced.isRecommended)
-        XCTAssertFalse(OnboardingViewModel.ExperienceTier.pro.isRecommended)
     }
 
     func test_experienceTier_modelIDs_areDistinct() {
         let ids = OnboardingViewModel.ExperienceTier.allCases.map { $0.modelID }
-        XCTAssertEqual(Set(ids).count, 4, "All model IDs must be distinct")
+        XCTAssertEqual(Set(ids).count, 3, "All model IDs must be distinct")
     }
 
     func test_experienceTier_storageLabels_areNonEmpty() {

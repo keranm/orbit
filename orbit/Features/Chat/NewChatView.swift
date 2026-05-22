@@ -74,12 +74,6 @@ struct NewChatView: View {
                 chatHomeContent
             }
         }
-        .task {
-            if let prompt = appState.pendingChatPrompt {
-                appState.pendingChatPrompt = nil
-                composerText = prompt
-            }
-        }
     }
 
     // MARK: - Shared runtime state layout

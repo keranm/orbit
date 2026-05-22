@@ -31,16 +31,10 @@ struct SidebarView: View {
     private var navList: some View {
         VStack(alignment: .leading, spacing: OSpacing.xxs) {
             navItem(.newChat, icon: "square.and.pencil", label: "New Chat")
-
-            if appState.isProMode {
-                navItem(.dashboard,  icon: "chart.bar.fill",      label: "Mesh Dashboard")
-                navItem(.coding,     icon: "chevron.left.forwardslash.chevron.right", label: "Code")
-                navItem(.playground, icon: "flask.fill",          label: "Playground")
-            }
-
-            navItem(.prompts,  icon: "sparkles",     label: "Prompts")
-            navItem(.models,   icon: "square.stack", label: "Models")
-            navItem(.settings, icon: "gearshape",    label: "Settings")
+            navItem(.explore, icon: "folder.badge.questionmark", label: "Explore")
+            navItem(.prompts, icon: "sparkles",     label: "Prompts")
+            navItem(.models,  icon: "square.stack", label: "Models")
+            navItem(.settings, icon: "gearshape",   label: "Settings")
         }
         .padding(.horizontal, OSpacing.xs)
     }

@@ -5,26 +5,6 @@ import SwiftUI
 final class AppState {
     var route: AppRoute = .newChat
 
-    /// Pro mode toggle — persisted across launches.
-    /// Stored property so @Observable tracks access and mutation.
-    /// didSet persists to UserDefaults on write.
-    var isProMode: Bool = UserDefaults.standard.bool(forKey: "orbitProMode") {
-        didSet { UserDefaults.standard.set(isProMode, forKey: "orbitProMode") }
-    }
-
-    func toggleProMode() {
-        isProMode.toggle()
-        // If toggling off while on a Pro-only route, reset to the default V1 route.
-        if !isProMode {
-            switch route {
-            case .dashboard, .coding, .playground:
-                route = .newChat
-            default:
-                break
-            }
-        }
-    }
-
     /// Nova companion state — updated by features in response to activity and runtime state.
     var novaState: NovaState = .idle
 
@@ -44,24 +24,12 @@ final class AppState {
     /// MainWindowView observes this and flips its showOnboarding state.
     var showOnboardingRequest = false
 
-    /// Persisted CodeViewModel so context survives navigation switches.
-    var codeViewModel = CodeViewModel()
-
-    /// When non-nil, the next view to mount should inject this prompt as chat text (NewChatView).
-    var pendingChatPrompt: String?
-
-    /// When non-nil, the next Code screen mount should use this as the active prompt.
-    var pendingCodePrompt: PendingCodePrompt?
+    /// Persisted ExploreViewModel so context survives navigation switches.
+    var exploreViewModel = ExploreViewModel()
 
     /// Shared reference for components that need the active model ref but
     /// can't hold an injected AppState (e.g. NovaOverlayViewController).
     static weak var current: AppState?
-
-    struct PendingCodePrompt {
-        let id: UUID
-        let name: String
-        let body: String
-    }
 
     // hasCompletedOnboarding is persisted via @AppStorage in MainWindowView — not stored here.
 

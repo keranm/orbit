@@ -2,11 +2,11 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class CodeViewModel {
+final class ExploreViewModel {
     let chatService: ChatService
 
     var rootURL: URL?
-    var treeItems: [CodeTreeItem] = []
+    var treeItems: [ExploreTreeItem] = []
     var selectedFileURL: URL?
     var fileContent: String = "" {
         didSet { updateSavedContentIfNeeded() }
@@ -15,13 +15,13 @@ final class CodeViewModel {
     var isLoading: Bool = false
     var errorMessage: String?
 
-    // Save tracking
     private var savedContent: String = ""
     private var hasLoadedContent = false
     var isModified: Bool { hasLoadedContent && fileContent != savedContent }
 
-    var currentLanguage: SyntaxLanguage {
-        SyntaxLanguage.from(selectedFileURL)
+    var isQuickLookFile: Bool {
+        guard let url = selectedFileURL else { return false }
+        return !isTextFile(url)
     }
 
     private func updateSavedContentIfNeeded() {
@@ -34,15 +34,6 @@ final class CodeViewModel {
     var assistantMessages: [AssistantMessage] = []
     var assistantInput: String = ""
     var assistantIsStreaming: Bool = false
-    var activePrompt: (id: UUID, name: String, body: String)?
-
-    func setActivePrompt(id: UUID, name: String, body: String) {
-        activePrompt = (id, name, body)
-    }
-
-    func clearActivePrompt() {
-        activePrompt = nil
-    }
 
     init(chatService: ChatService? = nil) {
         self.chatService = chatService ?? ChatService()
@@ -56,7 +47,7 @@ final class CodeViewModel {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
-        panel.title = "Select Project Folder"
+        panel.title = "Select Folder"
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -69,7 +60,7 @@ final class CodeViewModel {
         errorMessage = nil
 
         Task {
-            let tree = await buildTree(from: url)
+            let tree = await buildExploreTree(from: url)
             treeItems = tree
             isLoading = false
         }
@@ -83,6 +74,11 @@ final class CodeViewModel {
         isLoading = true
         errorMessage = nil
         hasLoadedContent = false
+
+        guard isTextFile(url) else {
+            isLoading = false
+            return
+        }
 
         Task {
             do {
@@ -111,7 +107,7 @@ final class CodeViewModel {
         }
     }
 
-    func toggleFolder(_ item: CodeTreeItem) {
+    func toggleFolder(_ item: ExploreTreeItem) {
         item.isExpanded.toggle()
     }
 
@@ -145,11 +141,10 @@ final class CodeViewModel {
         let fileContext = buildFileContext()
         let selectionSnippet = selectedText.isEmpty ? "" : "\n\nSelected text from the open file:\n```\n\(selectedText)\n```"
 
-        let promptPrefix = if let p = activePrompt { "\(p.body)\n\n---\n\n" } else { "" }
         let systemPrompt = """
-\(promptPrefix)You are an AI coding assistant integrated into Orbit's code editor. \
+You are an AI assistant integrated into Orbit's file explorer. \
 You have access to the user's project context and the currently open file. \
-Answer concisely and provide code examples when helpful.
+Answer concisely and provide helpful information about the code, content, or files the user is viewing.
 
 \(projectContext)\(fileContext)\(selectionSnippet)
 """
@@ -197,14 +192,7 @@ Answer concisely and provide code examples when helpful.
     private func buildProjectContext() -> String {
         guard let rootURL else { return "No project folder open.\n" }
         let fileCount = treeItems.count
-        let languages = collectLanguages()
-        let rootName = rootURL.lastPathComponent
-        var context = "Project: \(rootName) (\(fileCount) files)"
-        if !languages.isEmpty {
-            context += " · Languages: \(languages.joined(separator: ", "))"
-        }
-        context += "\n"
-        return context
+        return "Project: \(rootURL.lastPathComponent) (\(fileCount) files)\n"
     }
 
     private func buildFileContext() -> String {
@@ -216,83 +204,70 @@ Answer concisely and provide code examples when helpful.
         let preview = fileContent.prefix(300)
         return "Open file: \(name) (\(lines) lines)\n```\n\(preview)\(fileContent.count > 300 ? "\n..." : "")\n```\n"
     }
+}
 
-    private func collectLanguages() -> [String] {
-        var exts = Set<String>()
-        for item in treeItems where !item.isFolder {
-            let ext = item.url.pathExtension.lowercased()
-            if !ext.isEmpty { exts.insert(ext) }
-        }
-        let labels: [String: String] = [
-            "swift": "Swift", "m": "ObjC", "h": "C/C++ Headers",
-            "c": "C", "cpp": "C++", "cc": "C++", "hpp": "C++",
-            "py": "Python", "js": "JavaScript", "ts": "TypeScript",
-            "jsx": "React", "tsx": "React", "html": "HTML",
-            "css": "CSS", "scss": "SCSS", "json": "JSON",
-            "yml": "YAML", "yaml": "YAML", "toml": "TOML",
-            "md": "Markdown", "xml": "XML"
-        ]
-        return exts.compactMap { labels[$0] ?? $0.uppercased() }.sorted()
-    }
+// MARK: - Text file detection
+
+private let textExtensions: Set<String> = [
+    "swift", "m", "mm", "h", "hh", "hpp", "c", "cpp", "cc", "cxx",
+    "py", "js", "jsx", "ts", "tsx",
+    "html", "htm", "css", "scss", "sass", "less",
+    "json", "xml", "plist", "yaml", "yml", "toml",
+    "md", "txt", "rtf", "markdown",
+    "strings", "entitlements", "xcconfig",
+    "rb", "php", "rs", "go", "kt", "kts", "java",
+    "sh", "bash", "zsh", "fish",
+    "cfg", "ini", "conf", "env", "gitignore", "editorconfig",
+    "cmake", "gradle", "lock", "sql",
+]
+
+private let textFilenames: Set<String> = [
+    "Package.swift", "Podfile", "Makefile", "CMakeLists.txt",
+    "Dockerfile", "docker-compose.yml", ".gitignore", "README.md",
+    "Cartfile", "Mintfile", "Brewfile", "Vagrantfile",
+    "Gemfile", "Rakefile", "Procfile",
+]
+
+func isTextFile(_ url: URL) -> Bool {
+    let ext = url.pathExtension.lowercased()
+    let name = url.lastPathComponent
+    return textExtensions.contains(ext) || textFilenames.contains(name)
 }
 
 // MARK: - Tree model
 
-final class CodeTreeItem: Identifiable {
+final class ExploreTreeItem: Identifiable {
     let id = UUID()
     let url: URL
     let name: String
     let isFolder: Bool
-    let canEdit: Bool
-    var children: [CodeTreeItem]
+    var children: [ExploreTreeItem]
     var isExpanded: Bool
     let depth: Int
 
-    init(url: URL, name: String, isFolder: Bool, canEdit: Bool = true, children: [CodeTreeItem] = [], isExpanded: Bool = false, depth: Int = 0) {
+    init(url: URL, name: String, isFolder: Bool, children: [ExploreTreeItem] = [], isExpanded: Bool = false, depth: Int = 0) {
         self.url = url
         self.name = name
         self.isFolder = isFolder
-        self.canEdit = canEdit
         self.children = children
         self.isExpanded = isExpanded
         self.depth = depth
     }
 }
 
-private func canEditFile(_ url: URL) -> Bool {
-    let ext = url.pathExtension.lowercased()
-    let name = url.lastPathComponent
-    let textExtensions: Set<String> = [
-        "swift", "m", "mm", "h", "hh", "hpp", "c", "cpp", "cc", "cxx",
-        "py", "js", "jsx", "ts", "tsx",
-        "html", "htm", "css", "scss", "sass", "less",
-        "json", "xml", "plist", "yaml", "yml", "toml",
-        "md", "txt", "rtf",
-        "strings", "entitlements", "xcconfig",
-        "rb", "php", "rs", "go", "kt", "kts", "java",
-        "sh", "bash", "zsh",
-    ]
-    let explicitFiles: Set<String> = [
-        "Package.swift", "Podfile", "Makefile", "CMakeLists.txt",
-        "Dockerfile", "docker-compose.yml", ".gitignore", "README.md",
-        "Cartfile", "Mintfile", "Brewfile",
-    ]
-    return textExtensions.contains(ext) || explicitFiles.contains(name)
-}
-
 // MARK: - Tree builder
 
-private func buildTree(from root: URL) async -> [CodeTreeItem] {
+private func buildExploreTree(from root: URL) async -> [ExploreTreeItem] {
     let skipDirs: Set<String> = [".git", ".build", ".xcodeproj", "DerivedData", "node_modules", ".opencode", ".swiftpm"]
 
-    func scan(url: URL) async -> [CodeTreeItem] {
+    func scan(url: URL) async -> [ExploreTreeItem] {
         guard let enumerator = FileManager.default.enumerator(
             at: url,
             includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
             options: [.skipsPackageDescendants, .skipsHiddenFiles]
         ) else { return [] }
 
-        var items: [URL: CodeTreeItem] = [:]
+        var items: [URL: ExploreTreeItem] = [:]
 
         while let fileURL = enumerator.nextObject() as? URL {
             let resourceValues = try? fileURL.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
@@ -308,14 +283,13 @@ private func buildTree(from root: URL) async -> [CodeTreeItem] {
 
             let relativePath = Array(fileURL.pathComponents.dropFirst(root.pathComponents.count))
             let comps = Array(relativePath.dropLast())
-            var parent: CodeTreeItem?
+            var parent: ExploreTreeItem?
 
-            // Build parent folder chain
             for (i, component) in comps.enumerated() {
                 if skipDirs.contains(component) { break }
                 let parentURL = root.appendingPathComponent(comps[0...i].joined(separator: "/"))
                 if items[parentURL] == nil {
-                    let folder = CodeTreeItem(
+                    let folder = ExploreTreeItem(
                         url: parentURL,
                         name: component,
                         isFolder: true,
@@ -326,12 +300,10 @@ private func buildTree(from root: URL) async -> [CodeTreeItem] {
                 parent = items[parentURL]
             }
 
-            let editable = canEditFile(fileURL)
-            let file = CodeTreeItem(
+            let file = ExploreTreeItem(
                 url: fileURL,
                 name: name,
                 isFolder: false,
-                canEdit: editable,
                 depth: comps.count
             )
 
@@ -342,7 +314,6 @@ private func buildTree(from root: URL) async -> [CodeTreeItem] {
             }
         }
 
-        // Wire nested folders as children of their parent folders
         for folder in items.values where folder.isFolder && folder.depth > 0 {
             let parentURL = folder.url.deletingLastPathComponent()
             if let parent = items[parentURL], parent.isFolder {
@@ -350,7 +321,6 @@ private func buildTree(from root: URL) async -> [CodeTreeItem] {
             }
         }
 
-        // Sort children: folders first, then files, alphabetical within each
         for item in items.values {
             item.children = item.children.sorted { a, b in
                 if a.isFolder != b.isFolder { return a.isFolder }

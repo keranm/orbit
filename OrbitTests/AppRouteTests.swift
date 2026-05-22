@@ -7,6 +7,10 @@ final class AppRouteTests: XCTestCase {
         XCTAssertEqual(AppRoute.newChat, AppRoute.newChat)
     }
 
+    func test_route_explore_is_hashable() {
+        XCTAssertEqual(AppRoute.explore, AppRoute.explore)
+    }
+
     func test_route_prompts_is_hashable() {
         XCTAssertEqual(AppRoute.prompts, AppRoute.prompts)
     }
@@ -28,65 +32,34 @@ final class AppRouteTests: XCTestCase {
         XCTAssertNotEqual(AppRoute.chat(id: UUID()), AppRoute.chat(id: UUID()))
     }
 
-    func test_v1_routes_are_distinct() {
+    func test_all_routes_are_distinct() {
         let id = UUID()
-        let routes: [AppRoute] = [.newChat, .chat(id: id), .prompts, .models, .settings]
+        let routes: [AppRoute] = [.newChat, .chat(id: id), .explore, .prompts, .models, .settings]
         let set = Set(routes)
-        XCTAssertEqual(set.count, 5)
+        XCTAssertEqual(set.count, 6)
     }
 
-    func test_pro_routes_are_distinct_from_v1() {
-        let routes: [AppRoute] = [.dashboard, .coding, .playground]
-        let set = Set(routes)
-        XCTAssertEqual(set.count, 3)
-    }
-
-    func test_all_v1_cases_exhaustive() {
+    func test_all_cases_exhaustive() {
         var count = 0
-        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .prompts, .models, .settings]
+        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .explore, .prompts, .models, .settings]
         for route in routes {
             switch route {
-            case .newChat, .chat, .prompts, .models, .settings:
-                count += 1
-            case .dashboard, .coding, .playground:
-                break
-            }
-        }
-        XCTAssertEqual(count, 5)
-    }
-
-    func test_all_pro_cases_exhaustive() {
-        var count = 0
-        let routes: [AppRoute] = [.dashboard, .coding, .playground]
-        for route in routes {
-            switch route {
-            case .newChat, .chat, .prompts, .models, .settings:
-                break
-            case .dashboard, .coding, .playground:
+            case .newChat, .chat, .explore, .prompts, .models, .settings:
                 count += 1
             }
         }
-        XCTAssertEqual(count, 3)
+        XCTAssertEqual(count, 6)
     }
 
     func test_route_usable_as_dictionary_key() {
         var map: [AppRoute: String] = [:]
         map[.newChat]    = "newChat"
+        map[.explore]    = "explore"
         map[.prompts]    = "prompts"
         map[.models]     = "models"
         map[.settings]   = "settings"
-        map[.dashboard]  = "dashboard"
-        map[.coding]     = "coding"
-        map[.playground] = "playground"
         let id = UUID()
         map[.chat(id: id)] = "chat"
-        XCTAssertEqual(map.count, 8)
-    }
-
-    func test_playground_is_pro_only_route() {
-        // Playground should not appear in V1-only lists
-        let v1Routes: [AppRoute] = [.newChat, .prompts, .models, .settings]
-        let names = v1Routes.map { String(describing: $0) }
-        XCTAssertFalse(names.contains(where: { $0.contains("playground") }))
+        XCTAssertEqual(map.count, 6)
     }
 }

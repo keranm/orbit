@@ -14,7 +14,7 @@ struct OrbitApp: App {
     /// and the Mini-Chat overlay (which writes chats back into SwiftData).
     static let modelContainer: ModelContainer = {
         do {
-            return try ModelContainer(for: Chat.self, Message.self, PromptTemplate.self, PromptVariable.self, PromptVersion.self, PromptRunRecord.self)
+            return try ModelContainer(for: Chat.self, Message.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
@@ -75,7 +75,6 @@ struct OrbitApp: App {
                     // Start global hotkeys (skip in UI test environments)
                     if !CommandLine.arguments.contains("--mock-runtime") {
                         MiniChatHotkeyManager.shared.start()
-                        ProModeHotkeyManager.shared.start()
                     }
                 }
         }

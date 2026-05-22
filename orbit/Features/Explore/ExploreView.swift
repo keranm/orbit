@@ -1,12 +1,9 @@
 import SwiftUI
-import SwiftData
 
-struct ProCodeView: View {
+struct ExploreView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var modelContext
-    @State private var prompts: [PromptTemplate] = []
 
-    private var viewModel: CodeViewModel { appState.codeViewModel }
+    private var viewModel: ExploreViewModel { appState.exploreViewModel }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,32 +12,14 @@ struct ProCodeView: View {
             HSplitView {
                 fileExplorer
                     .frame(minWidth: 160, idealWidth: 200, maxWidth: 260)
-                codeEditor
+                previewPanel
                     .frame(minWidth: 320)
                 aiAssistantPanel
                     .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            ProStatusBar()
         }
         .background(Color.oBackground)
-        .task {
-            do { _ = try await appState.runtimeManager.fetchInstalledModels() } catch {}
-            let descriptor = FetchDescriptor<PromptTemplate>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
-            prompts = (try? modelContext.fetch(descriptor)) ?? []
-            consumePendingPrompt()
-        }
-    }
-
-    private func consumePendingPrompt() {
-        if let chatPrompt = appState.pendingChatPrompt {
-            appState.pendingChatPrompt = nil
-            viewModel.assistantInput = chatPrompt
-        }
-        if let codePrompt = appState.pendingCodePrompt {
-            appState.pendingCodePrompt = nil
-            viewModel.setActivePrompt(id: codePrompt.id, name: codePrompt.name, body: codePrompt.body)
-        }
     }
 
     // MARK: - Header
@@ -48,10 +27,10 @@ struct ProCodeView: View {
     private var pageHeader: some View {
         HStack(spacing: OSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Code")
+                Text("Explore")
                     .font(.oLargeTitle)
                     .foregroundStyle(Color.oTextPrimary)
-                Text("Build and iterate with AI on your side.")
+                Text("Browse, preview, and ask about your files.")
                     .font(.oBody)
                     .foregroundStyle(Color.oTextSecondary)
             }
@@ -59,7 +38,7 @@ struct ProCodeView: View {
             Button { viewModel.openFolder() } label: {
                 HStack(spacing: OSpacing.xs) {
                     Image(systemName: "folder").font(.system(size: 12))
-                    Text(viewModel.rootURL == nil ? "Open Project" : "Change Project")
+                    Text(viewModel.rootURL == nil ? "Open Folder" : "Change Folder")
                         .font(.oBodyMedium)
                 }
                 .foregroundStyle(Color.oTextPrimary)
@@ -111,7 +90,7 @@ struct ProCodeView: View {
                 } else {
                     VStack(spacing: OSpacing.sm) {
                         Spacer()
-                        Text("No text files found")
+                        Text("No files found")
                             .font(.oBody)
                             .foregroundStyle(Color.oTextTertiary)
                         Spacer()
@@ -149,7 +128,7 @@ struct ProCodeView: View {
     }
 
     @ViewBuilder
-    private func treeView(items: [CodeTreeItem]) -> some View {
+    private func treeView(items: [ExploreTreeItem]) -> some View {
         ForEach(items) { item in
             if item.isFolder {
                 folderRow(item)
@@ -159,7 +138,7 @@ struct ProCodeView: View {
         }
     }
 
-    private func folderRow(_ item: CodeTreeItem) -> some View {
+    private func folderRow(_ item: ExploreTreeItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Image(systemName: item.isExpanded ? "chevron.down" : "chevron.right")
@@ -181,107 +160,56 @@ struct ProCodeView: View {
             .onTapGesture { viewModel.toggleFolder(item) }
 
             if item.isExpanded {
-                            AnyView(treeView(items: item.children))
-        }
-    }
-}
-
-// MARK: - Model Picker
-
-private struct ModelPickerView: View {
-    let models: [InstalledModelEntry]
-    let activeRef: String?
-    let onSelect: (String) -> Void
-
-    private var label: String {
-        guard let ref = activeRef else { return "No model" }
-        if let match = models.first(where: { ($0.ref ?? $0.name) == ref }) {
-            return match.displayName
-        }
-        return ref
-    }
-
-    var body: some View {
-        Menu {
-            if models.isEmpty {
-                Text("No models installed")
-                    .font(.oCaption)
-            } else {
-                Section("Installed Models") {
-                    ForEach(0..<models.count, id: \.self) { i in
-                        let model = models[i]
-                        let ref = model.ref ?? model.name
-                        Button {
-                            onSelect(ref)
-                        } label: {
-                            HStack {
-                                Text(model.displayName)
-                                if ref == activeRef ?? "" {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                }
+                AnyView(treeView(items: item.children))
             }
-        } label: {
-            Text(label)
-                .font(.oCaption).foregroundStyle(Color.oTextSecondary)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
     }
-}
 
-    private func fileRow(_ item: CodeTreeItem) -> some View {
+    private func fileRow(_ item: ExploreTreeItem) -> some View {
         let selected = viewModel.selectedFileURL == item.url
+        let isText = isTextFile(item.url)
         return HStack(spacing: OSpacing.xs) {
-            Image(systemName: "doc.text")
+            Image(systemName: isText ? "doc.text" : "doc")
                 .font(.system(size: 11))
-                .foregroundStyle(item.canEdit ? (selected ? Color.oAccent : Color.oTextTertiary) : Color.oTextTertiary.opacity(0.5))
+                .foregroundStyle(selected ? Color.oAccent : Color.oTextTertiary)
             Text(item.name)
                 .font(.oCaption)
-                .foregroundStyle(item.canEdit ? (selected ? Color.oAccent : Color.oTextPrimary) : Color.oTextTertiary)
+                .foregroundStyle(selected ? Color.oAccent : Color.oTextPrimary)
                 .lineLimit(1)
             Spacer()
+            if !isText {
+                Image(systemName: "eye")
+                    .font(.system(size: 8))
+                    .foregroundStyle(Color.oTextTertiary.opacity(0.5))
+            }
         }
         .padding(.vertical, 3)
         .padding(.leading, OSpacing.sm + CGFloat(item.depth) * 12)
         .padding(.trailing, OSpacing.sm)
-        .background(selected && item.canEdit ? Color.oSidebarSelected : Color.clear)
+        .background(selected ? Color.oSidebarSelected : Color.clear)
         .contentShape(Rectangle())
-        .opacity(item.canEdit ? 1 : 0.5)
         .onTapGesture {
-            guard item.canEdit else { return }
             viewModel.selectFile(item.url)
         }
     }
 
-    // MARK: - Code Editor
+    // MARK: - Preview Panel
 
-    private var codeEditor: some View {
-        VStack(spacing: 0) {
-            editorTabBar
-            Divider()
-            if viewModel.selectedFileURL == nil {
-                emptyEditor
-            } else if viewModel.isLoading {
+    @ViewBuilder
+    private var previewPanel: some View {
+        if let url = viewModel.selectedFileURL {
+            if viewModel.isLoading {
                 loadingEditor
             } else if let error = viewModel.errorMessage {
                 errorEditor(error)
+            } else if viewModel.isQuickLookFile {
+                quickLookPreview(url: url)
             } else {
-                CodeEditorView(
-                    text: Binding(get: { viewModel.fileContent }, set: { viewModel.fileContent = $0 }),
-                    selectedText: Binding(get: { viewModel.selectedText }, set: { viewModel.selectedText = $0 }),
-                    fileURL: viewModel.selectedFileURL,
-                    onSave: { viewModel.saveFile() }
-                )
-                .background(Color.oSurface)
-                Divider()
-                editorStatusBar
+                textEditor
             }
+        } else {
+            emptyEditor
         }
-        .background(Color.oSurface)
     }
 
     private var emptyEditor: some View {
@@ -327,6 +255,28 @@ private struct ModelPickerView: View {
         .background(Color.oSurface)
     }
 
+    private func quickLookPreview(url: URL) -> some View {
+        QuickLookPreview(fileURL: url)
+            .background(Color.oSurface)
+    }
+
+    private var textEditor: some View {
+        VStack(spacing: 0) {
+            editorTabBar
+            Divider()
+            ExploreTextView(
+                text: Binding(get: { viewModel.fileContent }, set: { viewModel.fileContent = $0 }),
+                selectedText: Binding(get: { viewModel.selectedText }, set: { viewModel.selectedText = $0 }),
+                fileURL: viewModel.selectedFileURL,
+                onSave: { viewModel.saveFile() }
+            )
+            .background(Color.oSurface)
+            Divider()
+            editorStatusBar
+        }
+        .background(Color.oSurface)
+    }
+
     private var editorTabBar: some View {
         HStack(spacing: 0) {
             if let url = viewModel.selectedFileURL {
@@ -365,10 +315,6 @@ private struct ModelPickerView: View {
                 Text("\(viewModel.selectedText.components(separatedBy: .newlines).count) lines selected")
                     .foregroundStyle(Color.oAccent)
             }
-            HStack(spacing: 3) {
-                Circle().fill(Color.oSuccessGreen).frame(width: 5, height: 5)
-                Text("Read-only")
-            }
         }
         .font(.oMicro)
         .foregroundStyle(Color.oTextTertiary)
@@ -385,19 +331,6 @@ private struct ModelPickerView: View {
     // MARK: - AI Assistant
 
     private var modelRef: String { appState.runtimeManager.activeModelRef ?? "" }
-
-    private var modelPicker: some View {
-        let models = appState.runtimeManager.installedModels
-        let activeRef = appState.runtimeManager.activeModelRef
-        return HStack(spacing: OSpacing.xs) {
-            Image(systemName: "cpu").font(.system(size: 11)).foregroundStyle(Color.oTextTertiary)
-            ModelPickerView(
-                models: models,
-                activeRef: activeRef,
-                onSelect: { appState.runtimeManager.switchActiveModel(to: $0) }
-            )
-        }
-    }
 
     private func send() {
         guard !modelRef.isEmpty else {
@@ -417,7 +350,6 @@ private struct ModelPickerView: View {
                     .font(.oBodyMedium)
                     .foregroundStyle(Color.oTextPrimary)
                 Spacer()
-                modelPicker
             }
             .padding(.horizontal, OSpacing.md)
             .padding(.vertical, OSpacing.sm)
@@ -461,26 +393,6 @@ private struct ModelPickerView: View {
                     .lineLimit(1)
                 Spacer()
             }
-            if let prompt = viewModel.activePrompt {
-                HStack(spacing: OSpacing.xs) {
-                    Text("prompt:")
-                        .font(.oMicro)
-                        .foregroundStyle(Color.oAccent)
-                    Text(prompt.name)
-                        .font(.oMicro)
-                        .foregroundStyle(Color.oTextSecondary)
-                        .lineLimit(1)
-                    Button {
-                        viewModel.clearActivePrompt()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8))
-                            .foregroundStyle(Color.oTextTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                }
-            }
         }
         .padding(.horizontal, OSpacing.md)
         .padding(.vertical, OSpacing.xs)
@@ -493,7 +405,7 @@ private struct ModelPickerView: View {
             Image(systemName: "sparkle.magnifyingglass")
                 .font(.system(size: 28))
                 .foregroundStyle(Color.oTextTertiary)
-            Text("Ask about your code")
+            Text("Ask about your files")
                 .font(.oBody)
                 .foregroundStyle(Color.oTextTertiary)
             if modelRef.isEmpty {
@@ -533,32 +445,7 @@ private struct ModelPickerView: View {
 
     private var assistantComposer: some View {
         HStack(spacing: OSpacing.sm) {
-            Menu {
-                if prompts.isEmpty {
-                    Text("No prompts available")
-                        .font(.oCaption)
-                } else {
-                    ForEach(prompts) { template in
-                        Button {
-                            viewModel.setActivePrompt(id: template.id, name: template.name, body: template.body)
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(template.name)
-                                Text(template.templateDescription)
-                                    .font(.oCaption)
-                                    .foregroundStyle(Color.oTextTertiary)
-                            }
-                        }
-                    }
-                }
-            } label: {
-                Image(systemName: "doc.text").font(.system(size: 13)).foregroundStyle(Color.oTextTertiary)
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Inject a prompt")
-
-            TextField("Ask about your code…", text: Binding(get: { viewModel.assistantInput }, set: { viewModel.assistantInput = $0 }))
+            TextField("Ask about your files…", text: Binding(get: { viewModel.assistantInput }, set: { viewModel.assistantInput = $0 }))
                 .textFieldStyle(.plain)
                 .font(.oBody)
                 .foregroundStyle(Color.oTextPrimary)
@@ -576,9 +463,9 @@ private struct ModelPickerView: View {
     }
 }
 
-// MARK: - Code Editor View
+// MARK: - Text Editor View
 
-struct CodeEditorView: NSViewRepresentable {
+struct ExploreTextView: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedText: String
     let fileURL: URL?
@@ -589,7 +476,7 @@ struct CodeEditorView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let textView = EditableTextView()
+        let textView = ExploreNSTextView()
         textView.isEditable = true
         textView.isSelectable = true
         textView.isRichText = false
@@ -614,19 +501,13 @@ struct CodeEditorView: NSViewRepresentable {
         scrollView.backgroundColor = .textBackgroundColor
         scrollView.documentView = textView
 
-        let rulerView = LineNumberRulerView(textView: textView)
-        scrollView.verticalRulerView = rulerView
-        scrollView.hasVerticalRuler = true
-        scrollView.rulersVisible = true
-
         context.coordinator.textView = textView
-        context.coordinator.rulerView = rulerView
 
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? EditableTextView else { return }
+        guard let textView = scrollView.documentView as? ExploreNSTextView else { return }
 
         context.coordinator.currentLanguage = SyntaxLanguage.from(fileURL)
 
@@ -635,26 +516,22 @@ struct CodeEditorView: NSViewRepresentable {
             if let ts = textView.textStorage {
                 SyntaxHighlighter.apply(to: ts, language: context.coordinator.currentLanguage)
             }
-            context.coordinator.rulerView?.needsDisplay = true
         }
-
         textView.onSave = onSave
     }
 
     class Coordinator: NSObject, NSTextViewDelegate {
-        var parent: CodeEditorView
-        weak var textView: EditableTextView?
-        weak var rulerView: LineNumberRulerView?
+        var parent: ExploreTextView
+        weak var textView: ExploreNSTextView?
         var currentLanguage: SyntaxLanguage = .unknown
 
-        init(_ parent: CodeEditorView) {
+        init(_ parent: ExploreTextView) {
             self.parent = parent
         }
 
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
             parent.text = tv.string
-            rulerView?.needsDisplay = true
             if let ts = tv.textStorage {
                 SyntaxHighlighter.apply(to: ts, language: currentLanguage)
             }
@@ -669,29 +546,12 @@ struct CodeEditorView: NSViewRepresentable {
                 parent.selectedText = ""
             }
         }
-
-        func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
-            guard let replacement = replacementString else { return true }
-            if replacement == "\n" {
-                let string = textView.string as NSString
-                let lineRange = string.lineRange(for: NSRange(location: affectedCharRange.location, length: 0))
-                let currentLine = string.substring(with: lineRange)
-                let indent = String(currentLine.prefix { $0 == " " || $0 == "\t" })
-                textView.insertText("\n" + indent, replacementRange: affectedCharRange)
-                return false
-            }
-            if replacement == "\t" {
-                textView.insertText("    ", replacementRange: affectedCharRange)
-                return false
-            }
-            return true
-        }
     }
 }
 
-// MARK: - Editable Text View
+// MARK: - NSTextView subclass
 
-final class EditableTextView: NSTextView {
+final class ExploreNSTextView: NSTextView {
     var onSave: (() -> Void)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -702,60 +562,3 @@ final class EditableTextView: NSTextView {
         return super.performKeyEquivalent(with: event)
     }
 }
-
-// MARK: - Line Number Ruler
-
-final class LineNumberRulerView: NSRulerView {
-    weak var textView: NSTextView?
-
-    init(textView: NSTextView) {
-        self.textView = textView
-        super.init(scrollView: nil, orientation: .verticalRuler)
-        clientView = textView
-        ruleThickness = 40
-    }
-
-    required init(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let textView, let layout = textView.layoutManager, let container = textView.textContainer else { return }
-
-        let visible = textView.enclosingScrollView?.documentVisibleRect ?? rect
-        let glyphRange = layout.glyphRange(forBoundingRect: visible, in: container)
-
-        var lineNumber = 1
-        let string = textView.string as NSString
-        let charRangeBefore = layout.characterRange(forGlyphRange: NSRange(location: 0, length: glyphRange.location), actualGlyphRange: nil)
-        if charRangeBefore.length > 0 {
-            let before = string.substring(with: charRangeBefore)
-            lineNumber += before.filter { $0 == "\n" }.count
-        }
-
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-            .foregroundColor: NSColor.tertiaryLabelColor
-        ]
-
-        var glyphIndex = glyphRange.location
-        let endGlyph = NSMaxRange(glyphRange)
-        let totalGlyphs = layout.numberOfGlyphs
-
-        while glyphIndex < endGlyph && glyphIndex < totalGlyphs {
-            var lineRange = NSRange(location: NSNotFound, length: 0)
-            let glyphRect = layout.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: &lineRange)
-
-            let label = "\(lineNumber)"
-            let size = label.size(withAttributes: attrs)
-            let x = ruleThickness - size.width - 8
-            let y = glyphRect.origin.y + (glyphRect.height - size.height) / 2
-            label.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-
-            glyphIndex = NSMaxRange(lineRange)
-            lineNumber += 1
-        }
-    }
-}
-
-
