@@ -92,7 +92,7 @@ struct MainWindowView: View {
     private var novaVisible: Bool {
         switch appState.route {
         case .newChat, .chat: return false
-        case .explore, .prompts, .models, .settings: return false
+        case .agents, .agentBuilder, .explore, .prompts, .models, .settings: return false
         }
     }
 
@@ -115,6 +115,10 @@ struct MainWindowView: View {
             NewChatView()
         case .chat(let id):
             ChatViewLoader(chatID: id)
+        case .agents:
+            AgentsView()
+        case .agentBuilder(let id):
+            AgentBuilderView(agentID: id)
         case .explore:
             ExploreView()
         case .prompts:

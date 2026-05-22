@@ -14,7 +14,7 @@ struct OrbitApp: App {
     /// and the Mini-Chat overlay (which writes chats back into SwiftData).
     static let modelContainer: ModelContainer = {
         do {
-            return try ModelContainer(for: Chat.self, Message.self)
+            return try ModelContainer(for: Chat.self, Message.self, Agent.self, AgentStep.self, AgentRun.self)
         } catch {
             // Schema evolved between builds — delete the store and start fresh.
             // Chat history is lost but the app stays usable. Production builds
@@ -32,7 +32,7 @@ struct OrbitApp: App {
                 }
             }
             do {
-                return try ModelContainer(for: Chat.self, Message.self)
+                return try ModelContainer(for: Chat.self, Message.self, Agent.self, AgentStep.self, AgentRun.self)
             } catch {
                 fatalError("Orbit: ModelContainer unrecoverable after store deletion: \(error)")
             }
@@ -81,6 +81,10 @@ struct OrbitApp: App {
                             }
                         }
                     }
+
+                    // Seed built-in agents on first launch.
+                    let seedContext = ModelContext(Self.modelContainer)
+                    AgentSeeder.seedIfNeeded(context: seedContext)
 
                     // Wire Mini-Chat overlay with a shared ModelContext so conversations
                     // created in Mini-Chat appear in the main app sidebar automatically.

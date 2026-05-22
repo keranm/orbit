@@ -422,6 +422,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Orbit reads Mail to include emails in agent briefings. All processing happens locally.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "Orbit reads your calendar to build agent briefings. All processing happens locally.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Orbit reads your reminders to include them in agent workflows. All processing happens locally.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -456,6 +459,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Orbit reads Mail to include emails in agent briefings. All processing happens locally.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "Orbit reads your calendar to build agent briefings. All processing happens locally.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Orbit reads your reminders to include them in agent workflows. All processing happens locally.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;

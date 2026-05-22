@@ -9,7 +9,7 @@ final class SettingsTests: XCTestCase {
 
     func test_settingsSections_areCorrectCases() {
         let cases = SettingsView.SettingsSection.allCases
-        XCTAssertEqual(cases.count, 6, "Settings must have 6 sections: General, Models, Privacy, Mesh, Reset, About")
+        XCTAssertEqual(cases.count, 7, "Settings sections: General, Models, Privacy, Mesh, Mobile Access, Reset, About")
     }
 
     func test_settingsSections_containMesh() {

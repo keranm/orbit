@@ -31,6 +31,7 @@ struct SidebarView: View {
     private var navList: some View {
         VStack(alignment: .leading, spacing: OSpacing.xxs) {
             navItem(.newChat, icon: "square.and.pencil", label: "New Chat")
+            navItem(.agents, icon: "sparkles.rectangle.stack", label: "Agents")
             navItem(.explore, icon: "folder.badge.questionmark", label: "Explore")
             navItem(.prompts, icon: "sparkles",     label: "Prompts")
             navItem(.models,  icon: "square.stack", label: "Models")

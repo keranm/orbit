@@ -34,21 +34,34 @@ final class AppRouteTests: XCTestCase {
 
     func test_all_routes_are_distinct() {
         let id = UUID()
-        let routes: [AppRoute] = [.newChat, .chat(id: id), .explore, .prompts, .models, .settings]
+        let routes: [AppRoute] = [.newChat, .chat(id: id), .agents, .agentBuilder(id: id), .explore, .prompts, .models, .settings]
         let set = Set(routes)
-        XCTAssertEqual(set.count, 6)
+        XCTAssertEqual(set.count, 8)
     }
 
     func test_all_cases_exhaustive() {
         var count = 0
-        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .explore, .prompts, .models, .settings]
+        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .agents, .agentBuilder(id: UUID()), .explore, .prompts, .models, .settings]
         for route in routes {
             switch route {
-            case .newChat, .chat, .explore, .prompts, .models, .settings:
+            case .newChat, .chat, .agents, .agentBuilder, .explore, .prompts, .models, .settings:
                 count += 1
             }
         }
-        XCTAssertEqual(count, 6)
+        XCTAssertEqual(count, 8)
+    }
+
+    func test_agents_route_is_hashable() {
+        XCTAssertEqual(AppRoute.agents, AppRoute.agents)
+    }
+
+    func test_agentBuilder_equality_by_id() {
+        let id = UUID()
+        XCTAssertEqual(AppRoute.agentBuilder(id: id), AppRoute.agentBuilder(id: id))
+    }
+
+    func test_agentBuilder_inequality_across_ids() {
+        XCTAssertNotEqual(AppRoute.agentBuilder(id: UUID()), AppRoute.agentBuilder(id: UUID()))
     }
 
     func test_route_usable_as_dictionary_key() {
@@ -58,8 +71,10 @@ final class AppRouteTests: XCTestCase {
         map[.prompts]    = "prompts"
         map[.models]     = "models"
         map[.settings]   = "settings"
+        map[.agents]     = "agents"
         let id = UUID()
-        map[.chat(id: id)] = "chat"
-        XCTAssertEqual(map.count, 6)
+        map[.chat(id: id)]         = "chat"
+        map[.agentBuilder(id: id)] = "agentBuilder"
+        XCTAssertEqual(map.count, 8)
     }
 }
