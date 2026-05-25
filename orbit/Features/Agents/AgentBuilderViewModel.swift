@@ -66,6 +66,28 @@ final class AgentBuilderViewModel {
         markDirty()
     }
 
+    /// Inserts a new step of `type` at `targetOrder`, shifting existing steps down.
+    func insertStep(type: StepType, at targetOrder: Int) {
+        for s in agent.steps where s.order >= targetOrder {
+            s.order += 1
+        }
+        let newStep = AgentStep(order: targetOrder, stepType: type)
+        newStep.agent = agent
+        agent.steps.append(newStep)
+        selectedStepID = newStep.id
+        markDirty()
+    }
+
+    /// Moves the step with `id` to `targetOrder` using Array.move semantics.
+    func moveStep(id: UUID, toOrder targetOrder: Int) {
+        var steps = sortedSteps
+        guard let fromIndex = steps.firstIndex(where: { $0.id == id }) else { return }
+        let destination = min(targetOrder, steps.count)
+        steps.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: destination)
+        for (i, s) in steps.enumerated() { s.order = i }
+        markDirty()
+    }
+
     func markDirty() {
         isDirty = true
     }

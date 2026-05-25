@@ -49,7 +49,7 @@ final class PairingTrustService {
         let cleanExpected = session.code.replacingOccurrences(of: " ", with: "")
 
         guard cleanInput == cleanExpected else {
-            activeSession!.attemptCount += 1
+            activeSession?.attemptCount += 1
             return .invalidCode
         }
 

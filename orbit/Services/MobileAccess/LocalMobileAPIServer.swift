@@ -17,14 +17,14 @@ final class LocalMobileAPIServer {
     private let trustStore: DeviceTrustStore
     private let chatBridge: MobileChatBridge
     private let settingsStore: MobileAccessSettingsStore
-    private let runtimeManager: RuntimeManager
+    private let runtimeManager: RuntimeAdapter
 
     init(
         pairingService: PairingTrustService,
         trustStore: DeviceTrustStore,
         chatBridge: MobileChatBridge,
         settingsStore: MobileAccessSettingsStore,
-        runtimeManager: RuntimeManager
+        runtimeManager: RuntimeAdapter
     ) {
         self.pairingService = pairingService
         self.trustStore = trustStore

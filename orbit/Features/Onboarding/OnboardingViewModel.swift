@@ -53,7 +53,7 @@ final class OnboardingViewModel {
     var checksDone = false
 
     /// Injected from the environment — used for real system checks and runtime start.
-    var runtimeManager: RuntimeManager?
+    var runtimeManager: RuntimeAdapter?
 
     // MARK: - Experience selection
 
@@ -261,19 +261,10 @@ final class OnboardingViewModel {
         // 5 — AI runtime binary detection (real)
         await runCheck(index: 5) {
             if self.skipDelays { return .passed }
-            if let rm = self.runtimeManager {
-                await rm.detectInstall()
-                if rm.binaryPath != nil {
-                    let ver = rm.installedVersion.map { "v\($0)" } ?? "Detected"
-                    return .passed(detail: ver)
-                } else {
-                    return .failed("Not found — install required")
-                }
-            } else {
-                return RuntimeManager.resolveBinary() != nil
-                    ? .passed(detail: "Detected")
-                    : .failed("Not found — install required")
-            }
+            guard let rm = self.runtimeManager else { return .failed("no runtime") }
+            await rm.detectInstall()
+            let ver = rm.installedVersion.map { "v\($0)" } ?? "Detected"
+            return .passed(detail: ver)
         }
 
         checksDone = true
@@ -356,31 +347,13 @@ final class OnboardingViewModel {
                 return
             }
 
-            // Download via direct URLSession instead of mesh-llm models download CLI
-            let service = ModelDownloadService(cacheDir: rm.cacheDir)
-
             do {
-                for try await phase in service.download(ref: modelRef) {
-                    switch phase {
-                    case .resolving:
-                        downloadProgress = 0
-                    case .downloading(let p):
-                        downloadProgress = p
-                    case .verifying:
-                        downloadProgress = 0.95
-                    case .caching:
-                        downloadProgress = 0.98
-                    case .done:
-                        downloadProgress = 1.0
-                        downloadState = .completed
-                        try rm.ensureModelConfigured(modelRef)
-                        finishDownload()
-                        return
-                    case .failed(let msg):
-                        downloadState = .failed(msg)
-                        return
-                    }
-                }
+                downloadProgress = 0
+                try await rm.downloadModel(ref: modelRef)
+                downloadProgress = 1.0
+                downloadState = .completed
+                try rm.ensureModelConfigured(modelRef)
+                finishDownload()
             } catch {
                 downloadState = .failed(error.localizedDescription)
             }
@@ -475,10 +448,7 @@ final class OnboardingViewModel {
     ///   1. Exact catalog name == tier.modelID
     ///   2. Catalog name starts with tier.modelID (e.g. "Qwen3-32B" → "Qwen3-32B-Q4_K_M")
     ///   3. Fallback: pass modelID directly (mesh-llm resolves by catalog name)
-    private func resolveModelRef(for tier: ExperienceTier, rm: RuntimeManager) async -> String {
-        // ModelDownloadService.parseRef requires org/repo@branch:quant format.
-        // The mesh-llm catalog uses a different ref format (org/repo@branch/file.gguf),
-        // so skip catalog matching and always use our hardcoded defaultRef.
+    private func resolveModelRef(for tier: ExperienceTier, rm: RuntimeAdapter) async -> String {
         return tier.defaultRef
     }
 
@@ -497,7 +467,7 @@ final class OnboardingViewModel {
 
     /// Reads the model ref from config.toml via the runtime manager, used when
     /// useExistingModel is true to avoid resolving the ref from the catalog.
-    private func readConfigModelRef(_ rm: RuntimeManager) -> String? {
+    private func readConfigModelRef(_ rm: RuntimeAdapter) -> String? {
         rm.activeModelRef  // already set from config.toml during detectInstall
     }
 

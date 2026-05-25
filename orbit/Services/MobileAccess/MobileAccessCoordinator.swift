@@ -23,22 +23,16 @@ final class MobileAccessCoordinator {
 
     // MARK: - Dependencies
 
-    private let runtimeManager: RuntimeManager
+    private let runtimeManager: RuntimeAdapter
     private var pathMonitor: NWPathMonitor?
 
-    init(runtimeManager: RuntimeManager, chatService: ChatServiceProtocol) {
+    init(runtimeManager: RuntimeAdapter, chatService: ChatServiceProtocol) {
         self.runtimeManager = runtimeManager
 
         settingsStore = MobileAccessSettingsStore()
         trustStore = DeviceTrustStore()
         pairingService = PairingTrustService(trustStore: trustStore)
-        // Use a dedicated ChatService with its own isolated URLSession so mobile
-        // requests never share connection pools or caches with the Mac's chat.
-        let mobileService = ChatService(
-            apiPort: runtimeManager.apiPort,
-            session: MobileChatBridge.mobileSession
-        )
-        chatBridge = MobileChatBridge(runtimeManager: runtimeManager, chatService: mobileService)
+        chatBridge = MobileChatBridge(runtimeManager: runtimeManager, chatService: chatService)
         apiServer = LocalMobileAPIServer(
             pairingService: pairingService,
             trustStore: trustStore,

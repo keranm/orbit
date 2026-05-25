@@ -53,7 +53,7 @@ struct ChatHistoryPanel: View {
     private var novaSection: some View {
         VStack(spacing: OSpacing.xs) {
             NovaView(state: appState.novaState, size: 60)
-                .allowsHitTesting(false)
+                .onTapGesture { appState.handleNovaTap() }
                 .padding(.top, OSpacing.xl)
                 .padding(.bottom, OSpacing.sm)
         }

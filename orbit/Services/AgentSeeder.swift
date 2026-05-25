@@ -1,5 +1,8 @@
 import SwiftData
 import Foundation
+import OSLog
+
+private let logger = Logger(subsystem: "com.keranmckenzie.orbit", category: "AgentSeeder")
 
 /// Seeds the 6 built-in agents on first launch. Idempotent — skips if already seeded.
 struct AgentSeeder {
@@ -27,7 +30,7 @@ struct AgentSeeder {
         do {
             try context.save()
         } catch {
-            NSLog("AgentSeeder: failed to save — \(error)")
+            logger.error("Failed to save seeded agents: \(error)")
         }
     }
 

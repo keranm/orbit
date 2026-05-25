@@ -391,20 +391,62 @@ enum ModelCategory: String, CaseIterable {
 private struct CatalogRowView: View {
     let model: CatalogModel
     let isInstalled: Bool
-    let downloadPhase: ModelDownloadService.Phase?
+    let downloadPhase: ModelsViewModel.DownloadPhase?
     let onDownload: () -> Void
     let onCancel: () -> Void
     let onRetry: () -> Void
 
     @State private var isHovered = false
 
+    private var isInProgress: Bool {
+        guard let phase = downloadPhase else { return false }
+        if case .resolving = phase { return true }
+        if case .downloading = phase { return true }
+        return false
+    }
+
+    private var inProgressLabel: String {
+        if let phase = downloadPhase, case .downloading = phase {
+            return "Downloading — you can close this window"
+        }
+        return "Preparing…"
+    }
+
     var body: some View {
-        HStack(spacing: OSpacing.md) {
-            modelIcon
-            info
-            Spacer(minLength: OSpacing.sm)
-            actionArea
-                .frame(minWidth: 80, alignment: .trailing)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: OSpacing.md) {
+                modelIcon
+                info
+                Spacer(minLength: OSpacing.sm)
+                actionArea
+                    .frame(minWidth: 60, alignment: .trailing)
+            }
+
+            if isInProgress {
+                VStack(alignment: .leading, spacing: 3) {
+                    if let phase = downloadPhase, case .downloading(let p) = phase, p > 0 {
+                        ProgressView(value: p)
+                            .tint(Color.oAccent)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .tint(Color.oAccent)
+                    }
+                    HStack {
+                        Text(inProgressLabel)
+                            .font(.oMicro)
+                            .foregroundStyle(Color.oTextTertiary)
+                        Spacer()
+                        if let phase = downloadPhase, case .downloading(let p) = phase, p > 0 {
+                            Text("\(Int(p * 100))%")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(Color.oTextTertiary)
+                        }
+                    }
+                }
+                .padding(.leading, 36 + OSpacing.md)
+                .padding(.trailing, OSpacing.xs)
+            }
         }
         .padding(.horizontal, OSpacing.md)
         .padding(.vertical, OSpacing.sm)
@@ -460,11 +502,15 @@ private struct CatalogRowView: View {
         if let phase = downloadPhase {
             switch phase {
             case .resolving:
-                startingView
-            case .downloading(let p):
-                downloadingView(progress: p)
-            case .verifying, .caching:
-                installingView
+                EmptyView()
+            case .downloading:
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.oTextTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel download")
             case .done:
                 installedBadge
             case .failed(let msg):
@@ -487,57 +533,6 @@ private struct CatalogRowView: View {
                 .background(RoundedRectangle(cornerRadius: ORadius.pill).fill(Color.oAccent))
         }
         .buttonStyle(.plain)
-    }
-
-    private var startingView: some View {
-        HStack(spacing: OSpacing.xs) {
-            ProgressView().scaleEffect(0.55).frame(width: 14, height: 14)
-            Text("Starting…")
-                .font(.oCaption)
-                .foregroundStyle(Color.oTextTertiary)
-        }
-    }
-
-    private func downloadingView(progress: Double) -> some View {
-        HStack(spacing: OSpacing.sm) {
-            ZStack {
-                Circle()
-                    .stroke(Color.oDivider, lineWidth: 2)
-                    .frame(width: 20, height: 20)
-                if progress > 0 {
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(Color.oAccent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                        .frame(width: 20, height: 20)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 0.2), value: progress)
-                } else {
-                    SpinnerArc()
-                }
-            }
-
-            Text("\(Int(progress * 100))%")
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(Color.oTextSecondary)
-                .frame(width: 28, alignment: .leading)
-
-            Button(action: onCancel) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.oTextTertiary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Cancel")
-        }
-    }
-
-    private var installingView: some View {
-        HStack(spacing: OSpacing.xs) {
-            ProgressView().scaleEffect(0.55).frame(width: 14, height: 14)
-            Text("Installing…")
-                .font(.oCaption)
-                .foregroundStyle(Color.oTextTertiary)
-        }
     }
 
     private var installedBadge: some View {
@@ -575,23 +570,5 @@ private struct CatalogRowView: View {
                     .frame(maxWidth: 120)
             }
         }
-    }
-}
-
-// MARK: - Spinner
-
-private struct SpinnerArc: View {
-    @State private var angle: Double = 0
-    var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.7)
-            .stroke(Color.oAccent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            .frame(width: 14, height: 14)
-            .rotationEffect(.degrees(angle))
-            .onAppear {
-                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                    angle = 360
-                }
-            }
     }
 }

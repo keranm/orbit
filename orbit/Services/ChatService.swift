@@ -1,94 +1,18 @@
 import Foundation
 
-// MARK: - Request / response types
-
-struct ChatCompletionRequest: Encodable {
-    let model: String
-    let messages: [ChatRequestMessage]
-    let stream: Bool = true
-    let temperature: Double?
-    let topP: Double?
-    let maxTokens: Int?
-    let frequencyPenalty: Double?
-    let presencePenalty: Double?
-    /// Stable identifier for the end-user. Passed to the runtime so it can separate
-    /// KV-cache slots between the Mac session and each mobile device.
-    let user: String?
-
-    init(model: String, messages: [ChatRequestMessage],
-         temperature: Double? = nil, topP: Double? = nil,
-         maxTokens: Int? = nil, frequencyPenalty: Double? = nil,
-         presencePenalty: Double? = nil, user: String? = nil) {
-        self.model = model
-        self.messages = messages
-        self.temperature = temperature
-        self.topP = topP
-        self.maxTokens = maxTokens
-        self.frequencyPenalty = frequencyPenalty
-        self.presencePenalty = presencePenalty
-        self.user = user
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case model, messages, stream, temperature, user
-        case topP = "top_p"
-        case maxTokens = "max_tokens"
-        case frequencyPenalty = "frequency_penalty"
-        case presencePenalty = "presence_penalty"
-    }
-}
-
 struct ChatRequestMessage: Encodable {
     let role: String
     let content: String
 }
 
-/// An event yielded by the streaming chat completion.
 enum StreamEvent: Equatable {
-    /// A content token from the assistant delta.
     case token(String)
-    /// The stream finished with optional usage data from the server.
     case done(promptTokens: Int?, completionTokens: Int?)
 }
-
-/// A single SSE chunk from the streaming completions endpoint.
-struct ChatCompletionChunk: Decodable {
-    let choices: [ChunkChoice]
-    let usage: Usage?
-
-    struct ChunkChoice: Decodable {
-        let delta: ChunkDelta
-        let finishReason: String?
-
-        enum CodingKeys: String, CodingKey {
-            case delta
-            case finishReason = "finish_reason"
-        }
-    }
-
-    struct ChunkDelta: Decodable {
-        let role: String?
-        let content: String?
-    }
-
-    struct Usage: Decodable {
-        let promptTokens: Int?
-        let completionTokens: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case promptTokens = "prompt_tokens"
-            case completionTokens = "completion_tokens"
-        }
-    }
-}
-
-// MARK: - Errors
 
 enum ChatError: LocalizedError {
     case runtimeNotReady
     case noModelConfigured
-    case badStatus(Int)
-    case streamInterrupted
 
     var errorDescription: String? {
         switch self {
@@ -96,25 +20,11 @@ enum ChatError: LocalizedError {
             return "Orbit isn't ready. Start the runtime first."
         case .noModelConfigured:
             return "No model is configured. Choose one in Models."
-        case .badStatus(let c) where c == 404:
-            return "The AI model isn't available. Go to Models to check your setup."
-        case .badStatus(let c) where c == 400:
-            return "The request wasn't understood. Try starting a new chat."
-        case .badStatus:
-            return "Something went wrong. Try again in a moment."
-        case .streamInterrupted:
-            return "Response interrupted."
         }
     }
 }
 
-// MARK: - Protocol for testability
-
 protocol ChatServiceProtocol: Sendable {
-    /// Stream a chat completion with full inference parameters.
-    /// All optional parameters default to nil (server chooses defaults).
-    /// `user` is a stable identifier for the caller — passed to the runtime to allow
-    /// KV-cache slot separation between the Mac session and individual mobile devices.
     func streamCompletion(
         messages: [ChatRequestMessage],
         model: String,
@@ -129,7 +39,6 @@ protocol ChatServiceProtocol: Sendable {
 }
 
 extension ChatServiceProtocol {
-    /// Convenience — calls the full method with all optional params set to nil.
     func streamCompletion(
         messages: [ChatRequestMessage],
         model: String,
@@ -143,26 +52,8 @@ extension ChatServiceProtocol {
     }
 }
 
-// MARK: - Real implementation
-
-/// Calls the Mesh-LLM OpenAI-compatible streaming endpoint and yields content tokens.
 final class ChatService: ChatServiceProtocol {
-    let apiPort: Int
-    private let session: URLSession
-
-    /// - Parameters:
-    ///   - apiPort: Port the runtime is listening on.
-    ///   - session: URLSession to use. Pass a dedicated instance to isolate connection
-    ///     pools between concurrent callers (e.g. Mac chat vs mobile bridge).
-    init(apiPort: Int = 9337, session: URLSession = .shared) {
-        self.apiPort = apiPort
-        self.session = session
-    }
-
-    /// The exact URL posted to for chat completions. Exposed for regression testing.
-    var completionsURL: URL {
-        URL(string: "http://localhost:\(apiPort)/v1/chat/completions")!
-    }
+    private static let completionsURL = URL(string: "http://localhost:9337/v1/chat/completions")!
 
     func streamCompletion(
         messages: [ChatRequestMessage],
@@ -175,98 +66,82 @@ final class ChatService: ChatServiceProtocol {
         presencePenalty: Double?,
         user: String?
     ) -> AsyncThrowingStream<StreamEvent, Error> {
-        _stream(messages: messages, model: model, systemPrompt: systemPrompt,
-                temperature: temperature, topP: topP, maxTokens: maxTokens,
-                frequencyPenalty: frequencyPenalty, presencePenalty: presencePenalty,
-                user: user)
-    }
-
-    // MARK: - Internal
-
-    private func _stream(
-        messages: [ChatRequestMessage],
-        model: String,
-        systemPrompt: String,
-        temperature: Double? = nil,
-        topP: Double? = nil,
-        maxTokens: Int? = nil,
-        frequencyPenalty: Double? = nil,
-        presencePenalty: Double? = nil,
-        user: String? = nil
-    ) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
-            let task = Task {
+            Task {
+                var allMessages = messages
+                let trimmedPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedPrompt.isEmpty {
+                    allMessages.insert(ChatRequestMessage(role: "system", content: trimmedPrompt), at: 0)
+                }
+
+                var body: [String: Any] = [
+                    "model": model,
+                    "messages": allMessages.map { ["role": $0.role, "content": $0.content] },
+                    "stream": true
+                ]
+                if let temperature { body["temperature"] = temperature }
+                if let topP { body["top_p"] = topP }
+                if let maxTokens { body["max_tokens"] = maxTokens }
+                if let frequencyPenalty { body["frequency_penalty"] = frequencyPenalty }
+                if let presencePenalty { body["presence_penalty"] = presencePenalty }
+                if let user { body["user"] = user }
+
+                guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
+                    continuation.finish(throwing: ChatError.runtimeNotReady)
+                    return
+                }
+
+                var request = URLRequest(url: Self.completionsURL)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = bodyData
+
                 do {
-                    guard let url = URL(string: "http://localhost:\(apiPort)/v1/chat/completions") else {
-                        continuation.finish(throwing: ChatError.badStatus(0))
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                        continuation.finish(throwing: ChatError.runtimeNotReady)
                         return
                     }
 
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.setValue("application/json",    forHTTPHeaderField: "Content-Type")
-                    request.setValue("text/event-stream",   forHTTPHeaderField: "Accept")
-                    request.setValue("no-cache",            forHTTPHeaderField: "Cache-Control")
-                    request.timeoutInterval = 60
-
-                    // Prepend system prompt when set
-                    var allMessages = messages
-                    let trimmedPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmedPrompt.isEmpty {
-                        allMessages.insert(ChatRequestMessage(role: "system", content: trimmedPrompt), at: 0)
-                    }
-
-                    let body = ChatCompletionRequest(
-                        model: model, messages: allMessages,
-                        temperature: temperature, topP: topP,
-                        maxTokens: maxTokens,
-                        frequencyPenalty: frequencyPenalty,
-                        presencePenalty: presencePenalty,
-                        user: user
-                    )
-                    request.httpBody = try JSONEncoder().encode(body)
-
-                    let (bytes, response) = try await session.bytes(for: request)
-
-                    if let http = response as? HTTPURLResponse,
-                       !(200..<300).contains(http.statusCode) {
-                        continuation.finish(throwing: ChatError.badStatus(http.statusCode))
-                        return
-                    }
-
-                    var finalUsage: (prompt: Int, completion: Int)?
+                    var promptTokens: Int?
+                    var completionTokens: Int?
 
                     for try await line in bytes.lines {
-                        if Task.isCancelled { break }
+                        guard !Task.isCancelled else {
+                            continuation.finish()
+                            return
+                        }
                         guard line.hasPrefix("data: ") else { continue }
                         let payload = String(line.dropFirst(6))
-                        if payload == "[DONE]" { break }
-                        guard !payload.isEmpty,
-                              let data = payload.data(using: .utf8),
-                              let chunk = try? JSONDecoder().decode(ChatCompletionChunk.self, from: data)
-                        else { continue }
-
-                        if let usage = chunk.usage {
-                            finalUsage = (usage.promptTokens ?? 0, usage.completionTokens ?? 0)
+                        if payload == "[DONE]" {
+                            continuation.yield(.done(promptTokens: promptTokens, completionTokens: completionTokens))
+                            continuation.finish()
+                            return
                         }
+                        guard let data = payload.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
 
-                        if let content = chunk.choices.first?.delta.content, !content.isEmpty {
+                        if let choices = json["choices"] as? [[String: Any]],
+                           let delta = choices.first?["delta"] as? [String: Any],
+                           let content = delta["content"] as? String, !content.isEmpty {
                             continuation.yield(.token(content))
+                        }
+                        if let usage = json["usage"] as? [String: Any] {
+                            promptTokens = usage["prompt_tokens"] as? Int
+                            completionTokens = usage["completion_tokens"] as? Int
                         }
                     }
 
-                    continuation.yield(.done(
-                        promptTokens: finalUsage?.prompt,
-                        completionTokens: finalUsage?.completion
-                    ))
-                    continuation.finish()
-                } catch is CancellationError {
+                    continuation.yield(.done(promptTokens: promptTokens, completionTokens: completionTokens))
                     continuation.finish()
                 } catch {
-                    continuation.finish(throwing: error)
+                    if Task.isCancelled {
+                        continuation.finish()
+                    } else {
+                        continuation.finish(throwing: error)
+                    }
                 }
             }
-            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

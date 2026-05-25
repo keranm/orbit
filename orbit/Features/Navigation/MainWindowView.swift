@@ -61,7 +61,7 @@ struct MainWindowView: View {
                 NovaView(state: runtimeDrivenNovaState, size: 72)
                     .padding(.top, OSpacing.lg)
                     .padding(.trailing, OSpacing.xl)
-                    .allowsHitTesting(false)
+                    .onTapGesture { appState.handleNovaTap() }
                     .transition(.opacity)
             }
         }
@@ -88,11 +88,11 @@ struct MainWindowView: View {
         .animation(.spring(duration: 0.3), value: appState.runtimeManager.meshFallbackMessage != nil)
     }
 
-    /// Nova lives inside ChatHistoryPanel for chat screens — no top-right overlay needed there.
+    /// Nova is embedded inside chat views — no top-right overlay needed anywhere.
     private var novaVisible: Bool {
         switch appState.route {
-        case .newChat, .chat: return false
-        case .agents, .agentBuilder, .explore, .prompts, .models, .settings: return false
+        case .newChat, .chat, .agents, .agentBuilder, .explore, .prompts, .models, .settings, .easterEgg:
+            return false
         }
     }
 
@@ -127,6 +127,8 @@ struct MainWindowView: View {
             ModelsView()
         case .settings:
             SettingsView()
+        case .easterEgg:
+            LaunchSequenceView()
         }
     }
 }

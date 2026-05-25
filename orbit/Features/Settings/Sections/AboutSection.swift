@@ -92,15 +92,12 @@ struct AboutSection: View {
                 .foregroundStyle(Color.oTextTertiary)
 
             if let version = appState.runtimeManager.installedVersion {
-                metaRow(label: "Mesh-LLM", value: "v\(version)")
+                metaRow(label: "Mesh-LLM SDK", value: "v\(version)")
             } else {
-                metaRow(label: "Mesh-LLM", value: appState.runtimeStatus == .notInstalled ? "Not installed" : "Detecting…")
+                metaRow(label: "Mesh-LLM SDK", value: appState.runtimeStatus == .notInstalled ? "Not installed" : "Detecting…")
             }
 
-            if let path = appState.runtimeManager.binaryPath {
-                metaRow(label: "Binary", value: path.path
-                    .replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-            }
+            metaRow(label: "API", value: "MeshLLM Swift SDK")
         }
     }
 

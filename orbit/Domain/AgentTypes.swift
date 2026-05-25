@@ -1,4 +1,5 @@
 import Foundation
+import CoreTransferable
 
 // MARK: - Step types
 
@@ -177,6 +178,25 @@ enum DataSourceError: LocalizedError {
             return "Mail reader error: \(msg)"
         case .fetchFailed(let msg):
             return msg
+        }
+    }
+}
+
+// MARK: - Drag & Drop transfer types
+
+extension StepType: Transferable {
+    public static var transferRepresentation: some TransferRepresentation {
+        ProxyRepresentation(exporting: \.rawValue) { rawValue in
+            StepType(rawValue: rawValue) ?? .think
+        }
+    }
+}
+
+struct StepIDTransfer: Transferable {
+    let id: UUID
+    static var transferRepresentation: some TransferRepresentation {
+        ProxyRepresentation(exporting: \.id.uuidString) { uuidString in
+            StepIDTransfer(id: UUID(uuidString: uuidString) ?? UUID())
         }
     }
 }

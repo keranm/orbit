@@ -24,7 +24,9 @@ final class ChatViewModel {
     }
 
     private var runtimeIsReady: Bool {
-        if let state = appState { return state.runtimeStatus == .ready }
+        if let state = appState {
+            return state.runtimeStatus == .ready || state.runtimeStatus == .starting
+        }
         return true  // mock path in tests
     }
 
@@ -50,7 +52,7 @@ final class ChatViewModel {
         self.chat = chat
         self.modelContext = modelContext
         self.appState = appState
-        self.service = service ?? ChatService(apiPort: appState?.runtimeManager.apiPort ?? 9337)
+        self.service = service ?? ChatService()
         refreshMessages()
     }
 
@@ -97,6 +99,15 @@ final class ChatViewModel {
 
     // MARK: - Internal streaming
 
+    private func waitForRuntimeReady() async {
+        guard let state = appState else { return }
+        var ticks = 0
+        while state.runtimeStatus == .starting && ticks < 30 {
+            try? await Task.sleep(for: .milliseconds(500))
+            ticks += 1
+        }
+    }
+
     private func streamResponse() async {
         appState?.novaState = .thinking
         isStreaming = true
@@ -110,7 +121,30 @@ final class ChatViewModel {
         save()
         refreshMessages()
 
-        let modelRef = chat.modelRef
+        // If the user sent before the runtime finished starting, wait here.
+        // The thinking placeholder is already visible so the UI looks live.
+        await waitForRuntimeReady()
+
+        guard appState?.runtimeStatus == .ready else {
+            assistantMsg.isStreaming = false
+            assistantMsg.isInterrupted = true
+            save(); refreshMessages()
+            isStreaming = false
+            streamError = "Your AI isn't ready yet. Try again in a moment."
+            appState?.novaState = .error
+            return
+        }
+
+        // Resolve model ref — chat may have been created before the runtime was
+        // ready, in which case chat.modelRef is empty. Use the live ref instead.
+        let liveRef = appState?.activeModelRef ?? ""
+        let modelRef: String
+        if !liveRef.isEmpty {
+            modelRef = liveRef
+            if chat.modelRef.isEmpty { chat.modelRef = liveRef; save() }
+        } else {
+            modelRef = chat.modelRef
+        }
         // Truncate to last 40 messages (20 exchanges) to stay within model context limits
         let history: [ChatRequestMessage] = sortedMessages
             .filter { !$0.isStreaming }

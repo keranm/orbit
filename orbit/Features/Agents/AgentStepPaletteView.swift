@@ -63,6 +63,7 @@ struct AgentStepPaletteView: View {
             .contentShape(RoundedRectangle(cornerRadius: ORadius.sm))
         }
         .buttonStyle(.plain)
+        .draggable(type)
         .onHover { over in hoveredType = over ? type : nil }
         .accessibilityLabel("Add \(type.label) step")
         .accessibilityHint(type.subtitle)

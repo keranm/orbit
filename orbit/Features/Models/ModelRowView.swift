@@ -4,7 +4,7 @@ import SwiftUI
 struct ModelRowView: View {
     let model: InstalledModelEntry
     let isSelected: Bool
-    let downloadPhase: ModelDownloadService.Phase?
+    let downloadPhase: ModelsViewModel.DownloadPhase?
     let isActiveModel: Bool
     let onSelect: () -> Void
     let onSetActive: () -> Void

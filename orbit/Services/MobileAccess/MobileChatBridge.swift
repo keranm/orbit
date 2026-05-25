@@ -2,10 +2,10 @@ import Foundation
 
 @MainActor
 final class MobileChatBridge {
-    private let runtimeManager: RuntimeManager
+    private let runtimeManager: RuntimeAdapter
     private let chatService: ChatServiceProtocol
 
-    init(runtimeManager: RuntimeManager, chatService: ChatServiceProtocol) {
+    init(runtimeManager: RuntimeAdapter, chatService: ChatServiceProtocol) {
         self.runtimeManager = runtimeManager
         self.chatService = chatService
     }

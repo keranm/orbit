@@ -66,25 +66,25 @@ struct MessageBubble: View {
                 )
             }
 
-            // Visible response
-            Group {
+            // Content bubble
+            VStack(alignment: .leading, spacing: 0) {
                 if message.isStreaming && parsed.visible.isEmpty {
-                    if parsed.isReasoningInProgress {
-                        // Inside a think block — show calm indicator
-                        thinkingIndicator
-                    } else {
-                        thinkingIndicator
-                    }
-                } else {
+                    thinkingIndicator
+                        .padding(.horizontal, OSpacing.md)
+                        .padding(.vertical, OSpacing.sm)
+                } else if message.isStreaming {
+                    // Plain text during streaming — avoids flicker on partial ** tokens
                     Text(parsed.visible + streamingCursor)
                         .font(.oBody)
                         .foregroundStyle(Color.oTextPrimary)
-                        // textSelection uses visible content only — reasoning excluded from copy
                         .textSelection(.enabled)
+                        .padding(.horizontal, OSpacing.md)
+                        .padding(.vertical, OSpacing.sm)
+                } else {
+                    // Full Markdown + code block rendering once complete
+                    MarkdownContentView(content: parsed.visible)
                 }
             }
-            .padding(.horizontal, OSpacing.md)
-            .padding(.vertical, OSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: ORadius.lg)
                     .fill(Color.oSurface)
@@ -94,6 +94,7 @@ struct MessageBubble: View {
                 RoundedRectangle(cornerRadius: ORadius.lg)
                     .stroke(Color.oDivider, lineWidth: 1)
             )
+            .clipShape(RoundedRectangle(cornerRadius: ORadius.lg))
         }
     }
 
@@ -104,6 +105,166 @@ struct MessageBubble: View {
             }
         }
         .padding(.vertical, OSpacing.xs)
+    }
+}
+
+// MARK: - Markdown content
+
+/// Renders a completed assistant message with inline Markdown formatting and code blocks.
+private struct MarkdownContentView: View {
+    let content: String
+
+    private var segments: [MarkdownSegment] { parseMarkdownSegments(content) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                switch segment {
+                case .text(let text):
+                    inlineMarkdown(text)
+                        .padding(.horizontal, OSpacing.md)
+                        .padding(.vertical, OSpacing.xs)
+                case .code(let language, let codeContent):
+                    CodeBlockView(language: language, content: codeContent)
+                        .padding(.horizontal, OSpacing.sm)
+                        .padding(.vertical, OSpacing.xs)
+                }
+            }
+        }
+        .padding(.vertical, OSpacing.xs)
+    }
+
+    @ViewBuilder
+    private func inlineMarkdown(_ text: String) -> some View {
+        if let attributed = try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) {
+            Text(attributed)
+                .font(.oBody)
+                .foregroundStyle(Color.oTextPrimary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(text)
+                .font(.oBody)
+                .foregroundStyle(Color.oTextPrimary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+// MARK: - Code block
+
+private struct CodeBlockView: View {
+    let language: String?
+    let content: String
+
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header bar
+            HStack(spacing: OSpacing.xs) {
+                if let lang = language, !lang.isEmpty {
+                    Text(lang)
+                        .font(.oMicroMed)
+                        .foregroundStyle(Color.oTextTertiary)
+                }
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(content, forType: .string)
+                    withAnimation { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation { copied = false }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10))
+                        Text(copied ? "Copied" : "Copy")
+                            .font(.oMicroMed)
+                    }
+                    .foregroundStyle(copied ? Color.oSuccessGreen : Color.oTextTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, OSpacing.sm)
+            .padding(.vertical, OSpacing.xs)
+            .background(Color.oBackground)
+
+            Divider()
+                .overlay(Color.oDivider)
+
+            // Code content
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(content.trimmingCharacters(in: CharacterSet(charactersIn: "\n")))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Color.oTextPrimary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(OSpacing.sm)
+            }
+            .background(Color.oSurfaceSecondary)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ORadius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: ORadius.md)
+                .stroke(Color.oDivider, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Markdown segment parser
+
+private enum MarkdownSegment {
+    case text(String)
+    case code(language: String?, content: String)
+}
+
+private func parseMarkdownSegments(_ input: String) -> [MarkdownSegment] {
+    var segments: [MarkdownSegment] = []
+    var remaining = input
+
+    while !remaining.isEmpty {
+        guard let fenceRange = remaining.range(of: "```") else {
+            segments.append(.text(remaining))
+            break
+        }
+
+        // Text before the opening fence
+        let before = String(remaining[..<fenceRange.lowerBound])
+        if !before.isEmpty { segments.append(.text(before)) }
+        remaining = String(remaining[fenceRange.upperBound...])
+
+        // Optional language identifier on the same line as the opening fence
+        let language: String?
+        if let newlineIdx = remaining.firstIndex(of: "\n") {
+            let lang = String(remaining[..<newlineIdx]).trimmingCharacters(in: .whitespaces)
+            language = lang.isEmpty ? nil : lang
+            remaining = String(remaining[remaining.index(after: newlineIdx)...])
+        } else {
+            language = nil
+        }
+
+        // Content up to closing fence (or rest of string if unclosed)
+        if let closingRange = remaining.range(of: "```") {
+            let code = String(remaining[..<closingRange.lowerBound])
+            segments.append(.code(language: language, content: code))
+            remaining = String(remaining[closingRange.upperBound...])
+            if remaining.hasPrefix("\n") { remaining = String(remaining.dropFirst()) }
+        } else {
+            segments.append(.code(language: language, content: remaining))
+            remaining = ""
+        }
+    }
+
+    // Drop empty text segments that are just whitespace between blocks
+    return segments.filter {
+        if case .text(let s) = $0 { return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return true
     }
 }
 
@@ -130,7 +291,7 @@ private struct ReasoningView: View {
                 withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
             } label: {
                 HStack(spacing: OSpacing.xs) {
-                    Image(systemName: isInProgress ? "brain" : "brain")
+                    Image(systemName: "brain")
                         .font(.system(size: 10))
                         .foregroundStyle(Color.oTextTertiary)
                         .symbolEffect(.pulse, isActive: isInProgress)
@@ -161,7 +322,6 @@ private struct ReasoningView: View {
                 .fill(Color.oSurfaceSecondary)
         )
         .onAppear {
-            // Collapse long reasoning by default
             isExpanded = !isLong
         }
     }
