@@ -61,7 +61,7 @@ final class ModelsViewModel {
 
     // MARK: - Load installed models
 
-    func loadInstalled(rm: RuntimeAdapter) async {
+    func loadInstalled(rm: any ModelCataloguing) async {
         guard !isLoadingInstalled else { return }
 
         isLoadingInstalled = true
@@ -81,7 +81,7 @@ final class ModelsViewModel {
 
     // MARK: - Load recommended catalog
 
-    func loadRecommended(rm: RuntimeAdapter) async {
+    func loadRecommended(rm: any ModelCataloguing) async {
         guard !isLoadingCatalog else { return }
         isLoadingCatalog = true
         catalogLoadError = nil
@@ -102,7 +102,7 @@ final class ModelsViewModel {
 
     // MARK: - Download
 
-    func startDownload(ref: String, rm: RuntimeAdapter) {
+    func startDownload(ref: String, rm: any ModelCataloguing) {
         guard downloadTasks[ref] == nil else { return }
         downloadQueue[ref] = .resolving
         let modelName = recommendedModels.first { $0.ref == ref }?.name
@@ -208,7 +208,7 @@ final class ModelsViewModel {
         downloadQueue.removeValue(forKey: ref)
     }
 
-    func retryDownload(ref: String, rm: RuntimeAdapter) {
+    func retryDownload(ref: String, rm: any ModelCataloguing) {
         cancelDownload(ref: ref)
         startDownload(ref: ref, rm: rm)
     }
@@ -216,11 +216,11 @@ final class ModelsViewModel {
     // MARK: - Set active model
 
     /// Selects a mesh-served model. Does not restart the runtime.
-    func selectMeshModel(_ model: MeshModelEntry, rm: RuntimeAdapter) {
+    func selectMeshModel(_ model: MeshModelEntry, rm: any ModelCataloguing) {
         rm.selectMeshModel(model)
     }
 
-    func setActiveModel(_ model: InstalledModelEntry, rm: RuntimeAdapter) async {
+    func setActiveModel(_ model: InstalledModelEntry, rm: any ModelCataloguing) async {
         let ref = model.ref ?? model.name
 
         switch rm.status {
@@ -236,7 +236,7 @@ final class ModelsViewModel {
 
     // MARK: - Remove model
 
-    func removeModel(_ model: InstalledModelEntry, rm: RuntimeAdapter) async {
+    func removeModel(_ model: InstalledModelEntry, rm: any ModelCataloguing) async {
         let ref = model.ref ?? model.name
         removeError = nil
 
