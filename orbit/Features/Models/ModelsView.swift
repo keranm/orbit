@@ -75,7 +75,7 @@ struct ModelsView: View {
             }
         }
         .onChange(of: selectedTab) { _, newTab in
-            if newTab == .mesh {
+            if newTab == .mesh && appState.runtimeManager.meshModels.isEmpty {
                 Task { await appState.runtimeManager.refreshMeshModels() }
             }
         }
@@ -342,17 +342,31 @@ struct ModelsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if isPublic {
-                    HStack(spacing: OSpacing.sm) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.oWarningAmber)
-                        Text("These models run on shared computers. Your conversations may be processed by other participants.")
-                            .font(.oCaption)
-                            .foregroundStyle(Color.oTextSecondary)
-                            .lineSpacing(2)
+                    VStack(spacing: OSpacing.sm) {
+                        HStack(spacing: OSpacing.sm) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.oWarningAmber)
+                            Text("These models run on shared computers. Your conversations may be processed by other participants.")
+                                .font(.oCaption)
+                                .foregroundStyle(Color.oTextSecondary)
+                                .lineSpacing(2)
+                        }
+                        .padding(OSpacing.sm)
+                        .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oWarningAmber.opacity(0.08)))
+
+                        HStack(spacing: OSpacing.sm) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.oAccent)
+                            Text("Responses are generated on other people's computers over the internet. Speed depends on network conditions and how busy the mesh is — some replies feel instant, others may take a moment longer.")
+                                .font(.oCaption)
+                                .foregroundStyle(Color.oTextSecondary)
+                                .lineSpacing(2)
+                        }
+                        .padding(OSpacing.sm)
+                        .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oAccent.opacity(0.08)))
                     }
-                    .padding(OSpacing.sm)
-                    .background(RoundedRectangle(cornerRadius: ORadius.md).fill(Color.oWarningAmber.opacity(0.08)))
                     .padding(.horizontal, OSpacing.xl)
                     .padding(.top, OSpacing.lg)
                 }
@@ -439,11 +453,11 @@ private struct MeshModelRow: View {
         HStack(spacing: OSpacing.md) {
             ZStack {
                 RoundedRectangle(cornerRadius: ORadius.sm)
-                    .fill(isPublic ? Color.oWarningAmber.opacity(0.12) : Color.oMeshTeal.opacity(0.12))
+                    .fill(isPublic ? Color.oAccent.opacity(0.12) : Color.oMeshTeal.opacity(0.12))
                     .frame(width: 34, height: 34)
                 Image(systemName: "cpu")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
+                    .foregroundStyle(isPublic ? Color.oAccent : Color.oMeshTeal)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -455,10 +469,10 @@ private struct MeshModelRow: View {
 
                     Text(isPublic ? "Shared" : "Your Mesh")
                         .font(.oMicroMed)
-                        .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
+                        .foregroundStyle(isPublic ? Color.oAccent : Color.oMeshTeal)
                         .padding(.horizontal, OSpacing.xs)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(isPublic ? Color.oWarningAmber.opacity(0.10) : Color.oMeshTeal.opacity(0.10)))
+                        .background(Capsule().fill(isPublic ? Color.oAccent.opacity(0.10) : Color.oMeshTeal.opacity(0.10)))
                 }
 
                 HStack(spacing: OSpacing.xs) {
@@ -492,10 +506,10 @@ private struct MeshModelRow: View {
             if isActive {
                 Text("Active")
                     .font(.oMicroMed)
-                    .foregroundStyle(isPublic ? Color.oWarningAmber : Color.oMeshTeal)
+                    .foregroundStyle(isPublic ? Color.oAccent : Color.oMeshTeal)
                     .padding(.horizontal, OSpacing.xs)
                     .padding(.vertical, 3)
-                    .background(Capsule().fill(isPublic ? Color.oWarningAmber.opacity(0.12) : Color.oMeshTeal.opacity(0.12)))
+                    .background(Capsule().fill(isPublic ? Color.oAccent.opacity(0.12) : Color.oMeshTeal.opacity(0.12)))
             } else if isHovered {
                 Button("Use") { onUse() }
                     .buttonStyle(.plain)

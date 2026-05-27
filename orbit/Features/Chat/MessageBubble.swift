@@ -55,7 +55,6 @@ struct MessageBubble: View {
 
     private var assistantBubble: some View {
         let parsed = ReasoningParser.parse(message.content)
-        let streamingCursor = message.isStreaming ? "▍" : ""
 
         return VStack(alignment: .leading, spacing: OSpacing.xs) {
             // Reasoning block (only when showReasoning = true and reasoning exists)
@@ -73,11 +72,7 @@ struct MessageBubble: View {
                         .padding(.horizontal, OSpacing.md)
                         .padding(.vertical, OSpacing.sm)
                 } else if message.isStreaming {
-                    // Plain text during streaming — avoids flicker on partial ** tokens
-                    Text(parsed.visible + streamingCursor)
-                        .font(.oBody)
-                        .foregroundStyle(Color.oTextPrimary)
-                        .textSelection(.enabled)
+                    StreamingBubbleText(content: parsed.visible)
                         .padding(.horizontal, OSpacing.md)
                         .padding(.vertical, OSpacing.sm)
                 } else {
@@ -105,6 +100,43 @@ struct MessageBubble: View {
             }
         }
         .padding(.vertical, OSpacing.xs)
+    }
+}
+
+// MARK: - Streaming text with per-token fade-in
+
+/// Renders streaming text with a subtle fade-in on each incoming token.
+/// Keeps confirmed content stable while animating only the newly arrived chunk.
+/// Gives slow mesh tokens a smooth reveal instead of a jarring pop.
+private struct StreamingBubbleText: View {
+    let content: String
+
+    @State private var shownContent = ""
+    @State private var newChunk = ""
+    @State private var chunkOpacity: Double = 1.0
+
+    var body: some View {
+        (Text(shownContent).foregroundStyle(Color.oTextPrimary) +
+         Text(newChunk + "▍").foregroundStyle(Color.oTextPrimary.opacity(chunkOpacity)))
+            .font(.oBody)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .onChange(of: content) { _, new in
+                let totalShown = shownContent + newChunk
+                let delta: String
+                if new.hasPrefix(totalShown) {
+                    delta = String(new.dropFirst(totalShown.count))
+                } else if new.hasPrefix(shownContent) {
+                    delta = String(new.dropFirst(shownContent.count))
+                } else {
+                    delta = new
+                }
+                shownContent = totalShown
+                newChunk = delta
+                chunkOpacity = 0.0
+                withAnimation(.easeIn(duration: 0.18)) { chunkOpacity = 1.0 }
+            }
+            .onAppear { shownContent = content }
     }
 }
 

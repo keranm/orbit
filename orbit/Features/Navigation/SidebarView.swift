@@ -135,7 +135,7 @@ struct SidebarView: View {
         switch appState.runtimeStatus {
         case .ready:
             switch appState.runtimeManager.meshConnectionState {
-            case .connectedPublic:  return Color.oWarningAmber
+            case .connectedPublic:  return Color.oAccent
             case .connectedPrivate: return Color.oMeshTeal
             default:                return Color.oSuccessGreen
             }

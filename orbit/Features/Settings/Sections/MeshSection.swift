@@ -82,7 +82,7 @@ struct MeshSection: View {
         switch rm.meshConnectionState {
         case .disconnected:             return Color.oTextTertiary
         case .connectedPrivate:         return Color.oMeshTeal
-        case .connectedPublic:          return Color.oWarningAmber
+        case .connectedPublic:          return Color.oAccent
         case .connectingPrivate,
              .connectingPublic,
              .reconnecting:             return Color.oWarningAmber

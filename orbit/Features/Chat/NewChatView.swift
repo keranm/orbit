@@ -189,7 +189,7 @@ struct NewChatView: View {
             color = Color.oMeshTeal
         case .publicMesh:
             label = "Running on shared mesh"
-            color = Color.oWarningAmber
+            color = Color.oAccent
         case .unavailable:
             label = "Unavailable"
             color = Color.oTextTertiary
