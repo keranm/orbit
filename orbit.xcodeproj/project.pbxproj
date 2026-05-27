@@ -192,8 +192,8 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			packageReferences = (
-				ABCD1234ABCD1234ABCD1234 /* XCLocalSwiftPackageReference */,
-				DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference */,
+				ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */,
+				DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = 062434792FBAD1900072DF1E /* Products */;
 			projectDirPath = "";
@@ -275,15 +275,18 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		ABCD1234ABCD1234ABCD1234 /* XCLocalSwiftPackageReference */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../mesh-llm-sdk;
-		};
-/* End XCLocalSwiftPackageReference section */
+
 
 /* Begin XCRemoteSwiftPackageReference section */
-		DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference */ = {
+		ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Mesh-LLM/mesh-llm";
+			requirement = {
+				kind = exactVersion;
+				version = 0.67.0;
+			};
+		};
+		DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
 			requirement = {
@@ -297,7 +300,7 @@
 		111122223333444455556666 /* MeshLLM */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MeshLLM;
-			package = ABCD1234ABCD1234ABCD1234 /* XCLocalSwiftPackageReference */;
+			package = ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */;
 		};
 		7777888899990000AAAABBBB /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -459,7 +462,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.2";
+				MARKETING_VERSION = "0.1.0-alpha.3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.orbit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -500,7 +503,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.2";
+				MARKETING_VERSION = "0.1.0-alpha.3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.orbit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -525,7 +528,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.2";
+				MARKETING_VERSION = "0.1.0-alpha.3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -545,7 +548,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.2";
+				MARKETING_VERSION = "0.1.0-alpha.3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -564,7 +567,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.2";
+				MARKETING_VERSION = "0.1.0-alpha.3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -583,7 +586,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.2";
+				MARKETING_VERSION = "0.1.0-alpha.3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
