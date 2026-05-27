@@ -108,6 +108,23 @@ final class ChatViewModel {
         }
     }
 
+    /// Polls /readyz until the HTTP serving layer on port 9337 actually accepts
+    /// connections. Used after a connection-refused failure to avoid a fixed sleep.
+    private func waitForHttpServingReady() async {
+        guard let url = URL(string: "http://localhost:9337/readyz") else { return }
+        var attempts = 0
+        while attempts < 60 { // up to 30 seconds
+            attempts += 1
+            var req = URLRequest(url: url, timeoutInterval: 2)
+            req.httpMethod = "GET"
+            if let (_, resp) = try? await URLSession.shared.data(for: req),
+               (resp as? HTTPURLResponse)?.statusCode == 200 {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+    }
+
     private func streamResponse() async {
         appState?.novaState = .thinking
         isStreaming = true
@@ -209,15 +226,15 @@ final class ChatViewModel {
                     return
 
                 } catch {
-                    // On first attempt: if the connection dropped before any tokens
-                    // arrived (model still warming up after onboarding), retry once
-                    // after a short delay rather than surfacing the error immediately.
+                    // On first attempt: if the server wasn't ready yet (ECONNREFUSED
+                    // or mid-stream drop before any tokens), poll /readyz until the
+                    // HTTP layer accepts connections, then retry once.
                     if attempt == 1, firstTokenTime == nil,
                        let ue = error as? URLError,
                        ue.code == .networkConnectionLost || ue.code == .cannotConnectToHost {
                         appState?.novaState = .thinking
                         assistantMsg.content = ""
-                        try? await Task.sleep(for: .seconds(3))
+                        await waitForHttpServingReady()
                         guard !Task.isCancelled else { break }
                         continue
                     }
