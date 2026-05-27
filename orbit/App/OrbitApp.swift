@@ -2,6 +2,15 @@ import SwiftUI
 import SwiftData
 import Sparkle
 
+// Provides the appcast feed URL to Sparkle so it doesn't need SUFeedURL in Info.plist.
+// File-scoped so it outlives any single struct instance.
+private final class OrbitSparkleDelegate: NSObject, SPUUpdaterDelegate {
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        "https://raw.githubusercontent.com/keranm/orbit-release/main/appcast.xml"
+    }
+}
+private let _sparkleDelegate = OrbitSparkleDelegate()
+
 // macOS 26 (Xcode 26.5): any modifier or wrapper beyond .environment/.frame applied
 // to the WindowGroup content causes app.windows = 0 in XCUITest. The only safe
 // approach is to keep MainWindowView() as the *only* direct WindowGroup content
@@ -12,7 +21,7 @@ struct OrbitApp: App {
     @State private var appState = AppState()
     private let updaterController = SPUStandardUpdaterController(
         startingUpdater: true,
-        updaterDelegate: nil,
+        updaterDelegate: _sparkleDelegate,
         userDriverDelegate: nil
     )
 
