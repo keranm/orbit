@@ -50,10 +50,12 @@ final class RuntimeAdapter {
     private var nodeTask: Task<Void, Never>?
     private(set) var meshClient: Client?
 
-    /// Background `mesh-llm serve --join <token> --client` process that provides
-    /// the HTTP API at port 9337 for mesh inference routing. The SDK's MeshClient
-    /// cannot route to mesh peers without an HTTP relay — this sidecar IS that relay.
-    private(set) var meshServeProcess: Process?
+    /// Forwards to SidecarManager for callers (e.g. SDKChatService) that check liveness.
+    var meshServeProcess: Process? { sidecarManager.process }
+
+    // MARK: - Owned sub-managers
+
+    let sidecarManager = SidecarManager()
 
     // MARK: - Init
 
@@ -66,7 +68,7 @@ final class RuntimeAdapter {
 
         // Scan the HuggingFace cache so the onboarding "Choose Model" screen
         // can show already-downloaded models without starting the node.
-        let cached = scanHuggingFaceCacheForModels()
+        let cached = HuggingFaceCacheScanner.scan(cacheDir: cacheDir)
         installedModels = cached
 
         // Restore the last-used model ref if it's still on disk.
@@ -107,7 +109,7 @@ final class RuntimeAdapter {
 
             // Auto-discover which model to load:
             // explicit arg → last-used (if still on disk) → first installed
-            let cachedEntries = scanHuggingFaceCacheForModels()
+            let cachedEntries = HuggingFaceCacheScanner.scan(cacheDir: cacheDir)
             let cachedRefs = Set(cachedEntries.map { $0.ref ?? $0.name })
             let storedRef = UserDefaults.standard.string(forKey: "orbit.lastActiveModelRef")
             let refToLoad = modelRef
@@ -178,7 +180,7 @@ final class RuntimeAdapter {
         // SDK scanner skips symlinks (HuggingFace hub cache uses symlinks in snapshots/
         // pointing to content-addressed blobs). Fall back to our own scanner when empty.
         if entries.isEmpty {
-            entries = scanHuggingFaceCacheForModels()
+            entries = HuggingFaceCacheScanner.scan(cacheDir: cacheDir)
         }
         installedModels = entries
         return InstalledModelsResponse(cacheDir: cacheDir, results: entries)
@@ -246,7 +248,7 @@ final class RuntimeAdapter {
             try await client.start()
             meshClient = client
 
-            startMeshServeProcess(inviteToken: inviteToken)
+            sidecarManager.start(inviteToken: inviteToken)
             meshConnectionState = .connectedPrivate(peerCount: 0)
             startMonitoring()
             Task { await refreshMeshModels() }
@@ -275,7 +277,7 @@ final class RuntimeAdapter {
             )
             meshClient = client
 
-            startMeshServeProcess(publicAuto: true)
+            sidecarManager.start(publicAuto: true)
             meshConnectionState = .connectedPublic(peerCount: 0)
             startMonitoring()
 
@@ -299,7 +301,7 @@ final class RuntimeAdapter {
     }
 
     func leaveMesh() async {
-        stopMeshServeProcess()
+        sidecarManager.stop()
         await meshClient?.stop()
         meshClient = nil
         meshConnectionState = .disconnected
@@ -311,60 +313,8 @@ final class RuntimeAdapter {
 
     // MARK: - Mesh serve sidecar
 
-    /// Spawns `mesh-llm serve --join <token> --client --headless` so the SDK's
-    /// MeshClient has an HTTP relay at localhost:9337 for mesh inference routing.
     func restartMeshSidecar() {
-        switch meshConnectionState {
-        case .connectedPublic:
-            startMeshServeProcess(publicAuto: true)
-        case .connectedPrivate:
-            startMeshServeProcess(inviteToken: localInviteToken)
-        default:
-            break
-        }
-    }
-
-    private func startMeshServeProcess(inviteToken: String? = nil, publicAuto: Bool = false) {
-        stopMeshServeProcess()
-        guard let binary = findBinaryPath() else { return }
-
-        var args: [String] = ["serve", "--client", "--headless", "--port", "9337"]
-        if let token = inviteToken {
-            args += ["--join", token]
-        } else if publicAuto {
-            args += ["--auto"]
-        }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = args
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            meshServeProcess = process
-            setenv("MESH_CLIENT_API_BASE", "http://localhost:9337", 1)
-        } catch {
-            meshServeProcess = nil
-        }
-    }
-
-    private func stopMeshServeProcess() {
-        if let p = meshServeProcess {
-            p.terminate()
-            meshServeProcess = nil
-        }
-        unsetenv("MESH_CLIENT_API_BASE")
-    }
-
-    private func findBinaryPath() -> String? {
-        let candidates = [
-            ("~/.local/bin/mesh-bundle/mesh-llm" as NSString).expandingTildeInPath,
-            ("~/.local/bin/mesh-llm" as NSString).expandingTildeInPath,
-            ("~/.cargo/bin/mesh-llm" as NSString).expandingTildeInPath,
-        ]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        sidecarManager.reviveIfNeeded(connectionState: meshConnectionState, localInviteToken: localInviteToken)
     }
 
     func selectMeshModel(_ model: MeshModelEntry) {
@@ -458,74 +408,6 @@ final class RuntimeAdapter {
 
     // MARK: - Private
 
-    // Fallback for SDK bug: HuggingFace hub cache stores GGUF files as symlinks
-    // in snapshots/ dirs, but the Rust scanner uses is_file() which returns false
-    // for symlinks. We replicate the ref format and follow symlinks ourselves.
-    private func scanHuggingFaceCacheForModels() -> [InstalledModelEntry] {
-        let fm = FileManager.default
-        let hubURL = URL(fileURLWithPath: cacheDir)
-        var entries: [InstalledModelEntry] = []
-        var seenRefs = Set<String>()
-
-        guard let repoDirs = try? fm.contentsOfDirectory(
-            at: hubURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: .skipsHiddenFiles
-        ) else { return entries }
-
-        for repoDir in repoDirs {
-            let dirName = repoDir.lastPathComponent
-            guard dirName.hasPrefix("models--") else { continue }
-            let repoId = String(dirName.dropFirst("models--".count))
-                .replacingOccurrences(of: "--", with: "/")
-
-            let snapshotsDir = repoDir.appendingPathComponent("snapshots")
-            guard let snapshots = try? fm.contentsOfDirectory(
-                at: snapshotsDir, includingPropertiesForKeys: nil, options: .skipsHiddenFiles
-            ) else { continue }
-
-            for snapshot in snapshots {
-                guard let files = try? fm.contentsOfDirectory(
-                    at: snapshot, includingPropertiesForKeys: nil, options: .skipsHiddenFiles
-                ) else { continue }
-
-                for file in files {
-                    guard file.pathExtension.lowercased() == "gguf" else { continue }
-                    let modelRef = hfModelRef(repoId: repoId, fileName: file.lastPathComponent)
-                    guard seenRefs.insert(modelRef).inserted else { continue }
-
-                    let resolvedPath = file.resolvingSymlinksInPath().path
-                    let size = (try? fm.attributesOfItem(atPath: resolvedPath))?[.size] as? Int64
-                    entries.append(InstalledModelEntry(
-                        name: file.deletingPathExtension().lastPathComponent,
-                        ref: modelRef,
-                        size: size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) },
-                        type: "gguf",
-                        path: resolvedPath
-                    ))
-                }
-            }
-        }
-        return entries
-    }
-
-    // Replicates Rust's format_model_ref + quant_selector_from_gguf_file.
-    // Returns e.g. "unsloth/Qwen3-4B-GGUF:Q4_K_M"
-    private func hfModelRef(repoId: String, fileName: String) -> String {
-        let stem = String(fileName.dropLast(".gguf".count))
-        let stemLower = stem.lowercased()
-        let markers = ["-ud-", ".ud-", "-iq", ".iq", "-q", ".q",
-                       "-bf16", ".bf16", "-f16", ".f16", "-f32", ".f32"]
-        for marker in markers {
-            if let range = stemLower.range(of: marker, options: .backwards) {
-                let offset = stemLower.distance(from: stemLower.startIndex, to: range.lowerBound) + 1
-                let selectorStart = stem.index(stem.startIndex, offsetBy: offset)
-                return "\(repoId):\(stem[selectorStart...])"
-            }
-        }
-        return stem.isEmpty ? repoId : "\(repoId):\(stem)"
-    }
-
     private func startMonitoring() {
         nodeTask?.cancel()
         nodeTask = Task { [weak self] in
@@ -546,19 +428,10 @@ final class RuntimeAdapter {
                     }
                 }
                 // Revive the mesh sidecar if it exited while still on a mesh.
-                switch self.meshConnectionState {
-                case .connectedPublic:
-                    if self.meshServeProcess?.isRunning != true {
-                        self.startMeshServeProcess(publicAuto: true)
-                    }
-                case .connectedPrivate:
-                    if self.meshServeProcess?.isRunning != true,
-                       let token = self.localInviteToken {
-                        self.startMeshServeProcess(inviteToken: token)
-                    }
-                default:
-                    break
-                }
+                self.sidecarManager.reviveIfNeeded(
+                    connectionState: self.meshConnectionState,
+                    localInviteToken: self.localInviteToken
+                )
                 try? await Task.sleep(for: .seconds(5))
             }
         }
