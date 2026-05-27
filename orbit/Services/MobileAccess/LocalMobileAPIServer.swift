@@ -137,76 +137,19 @@ final class LocalMobileAPIServer {
         var buffer = receiveBuffers[connId] ?? Data()
         buffer.append(data)
 
-        guard let request = try? parseRequest(from: buffer) else {
+        guard let request = try? MobileHTTPParser.parse(from: buffer) else {
             receiveBuffers[connId] = buffer
             receiveRequest(on: connection, connId: connId)
             return
         }
 
         receiveBuffers[connId] = nil
-        handleParsedRequest(request, connection: connection)
-    }
-
-    // MARK: - HTTP parsing
-
-    private struct HTTPRequest {
-        let method: String
-        let path: String
-        let headers: [String: String]
-        let body: Data
-        let remoteHost: String?
-    }
-
-    private func parseRequest(from data: Data) throws -> HTTPRequest {
-        guard let requestStr = String(data: data, encoding: .utf8) else {
-            throw ServerError.badRequest
-        }
-
-        let lines = requestStr.components(separatedBy: "\r\n")
-        guard lines.count >= 1 else { throw ServerError.badRequest }
-
-        // Request line: METHOD /path HTTP/1.1
-        let requestParts = lines[0].components(separatedBy: " ")
-        guard requestParts.count >= 2 else { throw ServerError.badRequest }
-        let method = requestParts[0]
-        let path = requestParts[1]
-
-        // Headers
-        var headers: [String: String] = [:]
-        var headerIndex = 1
-        while headerIndex < lines.count {
-            let line = lines[headerIndex]
-            if line.isEmpty { break }
-            let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-            if parts.count == 2 {
-                let key = String(parts[0]).trimmingCharacters(in: .whitespaces).lowercased()
-                let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
-                headers[key] = value
-            }
-            headerIndex += 1
-        }
-
-        // Body
-        let headerEnd = lines.prefix(headerIndex + 1).joined(separator: "\r\n")
-        let headerLength = headerEnd.utf8.count + 2 // +2 for trailing \r\n
-        let bodyStartIndex = data.startIndex + headerLength
-        let body = bodyStartIndex < data.endIndex ? data[bodyStartIndex...] : Data()
-
-        // Check Content-Length
-        if let contentLengthStr = headers["content-length"],
-           let contentLength = Int(contentLengthStr) {
-            guard body.count >= contentLength else {
-                throw ServerError.incompleteBody(expected: contentLength, got: body.count)
-            }
-        }
-
-        return HTTPRequest(
-            method: method,
-            path: path,
-            headers: headers,
-            body: Data(body),
-            remoteHost: nil
+        var req = request
+        req = MobileHTTPRequest(
+            method: req.method, path: req.path, headers: req.headers,
+            body: req.body, remoteHost: remoteHost(for: connection)
         )
+        handleParsedRequest(req, connection: connection)
     }
 
     private func remoteHost(for connection: NWConnection) -> String? {
@@ -214,14 +157,9 @@ final class LocalMobileAPIServer {
         return "\(host)"
     }
 
-    private func isLoopback(host: String?) -> Bool {
-        guard let host else { return false }
-        return host == "127.0.0.1" || host == "::1" || host == "localhost"
-    }
-
     // MARK: - Routing
 
-    private func handleParsedRequest(_ request: HTTPRequest, connection: NWConnection) {
+    private func handleParsedRequest(_ request: MobileHTTPRequest, connection: NWConnection) {
         let path = request.path
         let method = request.method
 
@@ -236,7 +174,7 @@ final class LocalMobileAPIServer {
             writeResponse(connection, status: 200, body: healthJSON())
 
         case ("POST", "/v1/pairing/start"):
-            guard isLoopback(host: remoteHost(for: connection)) else {
+            guard MobileHTTPParser.isLoopback(request.remoteHost) else {
                 writeResponse(connection, status: 403, body: #"{"error":"internal_only"}"#)
                 return
             }
@@ -267,14 +205,14 @@ final class LocalMobileAPIServer {
             writeResponse(connection, status: 200, body: statusJSON())
 
         case ("POST", let p) where p.hasPrefix("/v1/devices/") && p.hasSuffix("/disconnect"):
-            guard isLoopback(host: remoteHost(for: connection)) else {
+            guard MobileHTTPParser.isLoopback(request.remoteHost) else {
                 writeResponse(connection, status: 403, body: #"{"error":"internal_only"}"#)
                 return
             }
             handleDisconnectDevice(path: p, connection: connection)
 
         case ("DELETE", let p) where p.hasPrefix("/v1/devices/"):
-            guard isLoopback(host: remoteHost(for: connection)) else {
+            guard MobileHTTPParser.isLoopback(request.remoteHost) else {
                 writeResponse(connection, status: 403, body: #"{"error":"internal_only"}"#)
                 return
             }
@@ -287,13 +225,8 @@ final class LocalMobileAPIServer {
 
     // MARK: - Authentication
 
-    private func authenticateRequest(_ request: HTTPRequest) -> String? {
-        guard let authHeader = request.headers["authorization"] else { return nil }
-        let parts = authHeader.split(separator: " ", maxSplits: 1)
-        guard parts.count == 2, parts[0].lowercased() == "bearer" else { return nil }
-        let token = String(parts[1])
-
-        // Find device by token
+    private func authenticateRequest(_ request: MobileHTTPRequest) -> String? {
+        guard let token = request.bearerToken else { return nil }
         for device in trustStore.devices {
             if trustStore.isTokenValid(publicDeviceId: device.publicDeviceId, token: token) {
                 trustStore.updateLastSeen(device.id)
@@ -338,7 +271,7 @@ final class LocalMobileAPIServer {
         writeResponse(connection, status: 200, body: body)
     }
 
-    private func handlePairingComplete(request: HTTPRequest, connection: NWConnection) {
+    private func handlePairingComplete(request: MobileHTTPRequest, connection: NWConnection) {
         struct PairingCompleteBody: Decodable {
             let pairingSessionId: String
             let code: String
@@ -446,7 +379,7 @@ final class LocalMobileAPIServer {
         }
     }
 
-    private func handleChatStream(request: HTTPRequest, connection: NWConnection, deviceId: String) {
+    private func handleChatStream(request: MobileHTTPRequest, connection: NWConnection, deviceId: String) {
         struct ChatStreamBody: Decodable {
             let modelId: String
             let messages: [ChatMessage]
@@ -493,14 +426,14 @@ final class LocalMobileAPIServer {
 
             do {
                 for try await token in stream {
-                    let sse = "data: {\"type\":\"token\",\"content\":\"\(LocalMobileAPIServer.escapeJSON(token))\"}\n\n"
+                    let sse = "data: {\"type\":\"token\",\"content\":\"\(MobileHTTPParser.escapeJSON(token))\"}\n\n"
                     connection.send(content: Data(sse.utf8), completion: .idempotent)
                 }
                 let doneBytes = Data("data: {\"type\":\"done\"}\n\n".utf8)
                 connection.send(content: doneBytes, completion: .contentProcessed { _ in finish() })
             } catch let error as MobileChatError {
                 let msg = error.errorDescription ?? "Unknown error"
-                let errBytes = Data("data: {\"type\":\"error\",\"message\":\"\(LocalMobileAPIServer.escapeJSON(msg))\"}\n\n".utf8)
+                let errBytes = Data("data: {\"type\":\"error\",\"message\":\"\(MobileHTTPParser.escapeJSON(msg))\"}\n\n".utf8)
                 connection.send(content: errBytes, completion: .contentProcessed { _ in finish() })
             } catch {
                 let errBytes = Data("data: {\"type\":\"error\",\"message\":\"Request failed.\"}\n\n".utf8)
@@ -571,52 +504,17 @@ final class LocalMobileAPIServer {
         return UUID(uuidString: trimmed)
     }
 
-    private static func escapeJSON(_ string: String) -> String {
-        string
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\t", with: "\\t")
-    }
-
     // MARK: - Response writer
 
     private func writeResponse(_ connection: NWConnection, status: Int, body: String) {
-        let statusText: String
-        switch status {
-        case 200: statusText = "OK"
-        case 204: statusText = "No Content"
-        case 400: statusText = "Bad Request"
-        case 401: statusText = "Unauthorized"
-        case 403: statusText = "Forbidden"
-        case 404: statusText = "Not Found"
-        case 405: statusText = "Method Not Allowed"
-        case 429: statusText = "Too Many Requests"
-        case 500: statusText = "Internal Server Error"
-        default:  statusText = "Unknown"
-        }
-
-        let data = Data(body.utf8)
-        let response = "HTTP/1.1 \(status) \(statusText)\r\n" +
-                       "Content-Type: application/json\r\n" +
-                       "Content-Length: \(data.count)\r\n" +
-                       "Connection: close\r\n" +
-                       "\r\n"
-        var sendData = Data(response.utf8)
-        sendData.append(data)
-
         // contentProcessed fires when the data reaches the OS send buffer,
         // ensuring the response is fully queued before we close the connection.
         // Closing immediately with .idempotent was racing the TCP stack and
         // the remote end was seeing a RST before it could read the response body.
-        connection.send(content: sendData, completion: .contentProcessed { _ in
+        let response = MobileHTTPResponse(status: status, body: body)
+        connection.send(content: response.wireData, completion: .contentProcessed { _ in
             connection.cancel()
         })
     }
 }
 
-private enum ServerError: Error {
-    case badRequest
-    case incompleteBody(expected: Int, got: Int)
-}
