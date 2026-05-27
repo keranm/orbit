@@ -332,7 +332,7 @@ struct OnboardingFlowView: View {
 
         case .idle:
             Button(action: { viewModel.advance() }) {
-                Text("Download Model")
+                Text(viewModel.selectedExistingModel != nil ? "Continue" : "Download Model")
                     .font(.oBodyMedium)
                     .foregroundStyle(.white)
                     .padding(.horizontal, OSpacing.lg)
