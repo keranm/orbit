@@ -334,9 +334,11 @@ final class OnboardingViewModel {
             }
             guard !Task.isCancelled else { return }
 
-            // If picking an already-installed model, skip the download entirely
-            // and store the ref so startServing() loads the right model.
+            // If picking an already-installed model, skip the download but still
+            // start the node — loadModel() requires node != nil.
             if selectedExistingModel != nil {
+                await rm.start()
+                guard !Task.isCancelled else { return }
                 downloadedModelRef = modelRef
                 downloadProgress = 1.0
                 downloadState = .completed
