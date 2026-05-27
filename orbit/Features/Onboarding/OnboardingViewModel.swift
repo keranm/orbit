@@ -303,6 +303,7 @@ final class OnboardingViewModel {
 
     var downloadState: DownloadState = .idle
     var downloadProgress: Double = 0
+    private(set) var downloadedModelRef: String?
 
     func startDownload() {
         downloadState = .inProgress
@@ -348,11 +349,16 @@ final class OnboardingViewModel {
             }
 
             do {
+                // Node must be running before the SDK can download.
+                // start() is idempotent — no-op if already running.
+                await rm.start()
+                guard !Task.isCancelled else { return }
+
                 downloadProgress = 0
                 try await rm.downloadModel(ref: modelRef)
                 downloadProgress = 1.0
+                downloadedModelRef = modelRef
                 downloadState = .completed
-                try rm.ensureModelConfigured(modelRef)
                 finishDownload()
             } catch {
                 downloadState = .failed(error.localizedDescription)
@@ -388,9 +394,15 @@ final class OnboardingViewModel {
             }
 
             // Start the runtime — model is cached, so this should be fast.
+            // If we already started the node during download, just load the model
+            // directly (start() would be a no-op, leaving status at .noModelConfigured).
             prepareItems[0].status = .active(0)
             prepareItems[0].detail = "Starting mesh-LLM…"
-            await rm.start()
+            if let ref = downloadedModelRef {
+                await rm.loadModel(ref)
+            } else {
+                await rm.start()
+            }
 
             let deadline = Date().addingTimeInterval(120)
             let startedAt = Date()

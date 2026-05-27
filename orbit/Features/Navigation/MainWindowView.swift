@@ -61,7 +61,6 @@ struct MainWindowView: View {
                 NovaView(state: runtimeDrivenNovaState, size: 72)
                     .padding(.top, OSpacing.lg)
                     .padding(.trailing, OSpacing.xl)
-                    .onTapGesture { appState.handleNovaTap() }
                     .transition(.opacity)
             }
         }

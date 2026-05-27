@@ -9,7 +9,7 @@ final class AppState {
     var novaState: NovaState = .idle
 
     /// Owned runtime manager. Drives runtimeStatus and Nova state.
-    let runtimeManager: RuntimeManager
+    let runtimeManager: RuntimeAdapter
 
     /// Mobile Access coordinator — owns all mobile services lifecycle.
     let mobileAccessCoordinator: MobileAccessCoordinator
@@ -37,11 +37,11 @@ final class AppState {
     // hasCompletedOnboarding is persisted via @AppStorage in MainWindowView — not stored here.
 
     init() {
-        let rm = RuntimeManager()
+        let rm = RuntimeAdapter()
         runtimeManager = rm
         mobileAccessCoordinator = MobileAccessCoordinator(
             runtimeManager: rm,
-            chatService: ChatService(apiPort: rm.apiPort)
+            chatService: ChatService()
         )
     }
 }
