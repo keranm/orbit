@@ -106,7 +106,7 @@ final class ModelsViewModel {
         guard downloadTasks[ref] == nil else { return }
         downloadQueue[ref] = .resolving
         let modelName = recommendedModels.first { $0.ref == ref }?.name
-        let expectedBytes = parseSizeToBytes(recommendedModels.first { $0.ref == ref }?.size)
+        let expectedBytes = HuggingFaceCacheScanner.parseExpectedBytes(recommendedModels.first { $0.ref == ref }?.size)
         let cacheDir = rm.cacheDir
 
         downloadTasks[ref] = Task {
@@ -116,7 +116,9 @@ final class ModelsViewModel {
                 // Poll the HuggingFace blob directory for real file-size progress
                 let progressTask: Task<Void, Never>? = expectedBytes.map { bytes in
                     Task { [weak self] in
-                        await self?.pollDownloadProgress(ref: ref, expectedBytes: bytes, cacheDir: cacheDir)
+                        for await progress in HuggingFaceCacheScanner.pollBlobProgress(ref: ref, cacheDir: cacheDir, expectedBytes: bytes) {
+                            await MainActor.run { self?.downloadQueue[ref] = .downloading(progress) }
+                        }
                     }
                 }
                 defer { progressTask?.cancel() }
@@ -135,70 +137,6 @@ final class ModelsViewModel {
                     downloadQueue[ref] = .failed("Download stopped. Try again.")
                 }
             }
-        }
-    }
-
-    // MARK: - Download progress polling
-
-    private func parseSizeToBytes(_ sizeLabel: String?) -> Int64? {
-        guard let s = sizeLabel?.trimmingCharacters(in: .whitespaces).uppercased() else { return nil }
-        if s.hasSuffix("GB"), let v = Double(s.dropLast(2)) { return Int64(v * 1_000_000_000) }
-        if s.hasSuffix("MB"), let v = Double(s.dropLast(2)) { return Int64(v * 1_000_000) }
-        return nil
-    }
-
-    private func repoDirName(from ref: String) -> String? {
-        let repoPath = ref.contains(":") ? String(ref.split(separator: ":")[0]) : ref
-        let parts = repoPath.split(separator: "/")
-        guard parts.count == 2 else { return nil }
-        return "models--\(parts[0])--\(parts[1])"
-    }
-
-    private func pollDownloadProgress(ref: String, expectedBytes: Int64, cacheDir: String) async {
-        let fm = FileManager.default
-        let blobsURL: URL = {
-            if let dir = repoDirName(from: ref) {
-                return URL(fileURLWithPath: cacheDir).appendingPathComponent(dir).appendingPathComponent("blobs")
-            }
-            return URL(fileURLWithPath: cacheDir)
-        }()
-        var prevSizes: [String: Int64] = [:]
-
-        while !Task.isCancelled {
-            var maxBytes: Int64 = 0
-            var curSizes: [String: Int64] = [:]
-
-            if let enumerator = fm.enumerator(
-                at: blobsURL,
-                includingPropertiesForKeys: [URLResourceKey.fileSizeKey],
-                options: [.skipsHiddenFiles]
-            ) {
-                for case let url as URL in enumerator {
-                    // Skip symlinks — we want actual blobs, not the snapshot symlinks
-                    guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink != true else { continue }
-                    guard let size = (try? url.resourceValues(forKeys: [URLResourceKey.fileSizeKey]))?.fileSize else { continue }
-                    let fileBytes = Int64(size)
-                    let key = url.lastPathComponent
-                    curSizes[key] = fileBytes
-
-                    if key.hasSuffix(".incomplete") {
-                        // Standard hf-hub naming for in-progress blobs
-                        maxBytes = max(maxBytes, fileBytes)
-                    } else if fileBytes > 1_000_000, fileBytes < expectedBytes {
-                        // Fallback: any large file that grew since last poll is likely an in-progress blob
-                        if fileBytes > (prevSizes[key] ?? 0) {
-                            maxBytes = max(maxBytes, fileBytes)
-                        }
-                    }
-                }
-            }
-            prevSizes = curSizes
-
-            if maxBytes > 0 {
-                let progress = min(Double(maxBytes) / Double(expectedBytes), 0.99)
-                downloadQueue[ref] = .downloading(progress)
-            }
-            try? await Task.sleep(for: .milliseconds(500))
         }
     }
 

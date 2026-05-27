@@ -57,6 +57,88 @@ enum HuggingFaceCacheScanner {
 
     // Replicates Rust's format_model_ref + quant_selector_from_gguf_file.
     // Returns e.g. "unsloth/Qwen3-4B-GGUF:Q4_K_M"
+    // MARK: - Download progress polling
+
+    /// Converts a human-readable size label ("4.7 GB", "~397 MB") to bytes.
+    static func parseExpectedBytes(_ sizeLabel: String?) -> Int64? {
+        guard let raw = sizeLabel else { return nil }
+        // Strip leading non-numeric characters (e.g. "~")
+        let s = raw.drop(while: { !$0.isNumber }).trimmingCharacters(in: .whitespaces).uppercased()
+        if s.hasSuffix("GB"), let v = Double(s.dropLast(2).trimmingCharacters(in: .whitespaces)) {
+            return Int64(v * 1_000_000_000)
+        }
+        if s.hasSuffix("MB"), let v = Double(s.dropLast(2).trimmingCharacters(in: .whitespaces)) {
+            return Int64(v * 1_000_000)
+        }
+        return nil
+    }
+
+    /// Derives the HuggingFace hub `models--org--repo` directory name from a model ref.
+    static func repoDirName(from ref: String) -> String? {
+        let repoPath = ref.contains(":") ? String(ref.split(separator: ":")[0]) : ref
+        let parts = repoPath.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        return "models--\(parts[0])--\(parts[1])"
+    }
+
+    /// Polls the HuggingFace blobs directory every 500 ms, yielding progress in [0, 0.99].
+    /// Cancel the consuming Task when the download completes to stop polling.
+    static func pollBlobProgress(
+        ref: String,
+        cacheDir: String,
+        expectedBytes: Int64
+    ) -> AsyncStream<Double> {
+        let fm = FileManager.default
+        let blobsURL: URL = {
+            if let dir = repoDirName(from: ref) {
+                return URL(fileURLWithPath: cacheDir).appendingPathComponent(dir).appendingPathComponent("blobs")
+            }
+            return URL(fileURLWithPath: cacheDir)
+        }()
+
+        return AsyncStream { continuation in
+            Task {
+                var prevSizes: [String: Int64] = [:]
+                while !Task.isCancelled {
+                    var maxBytes: Int64 = 0
+                    var curSizes: [String: Int64] = [:]
+
+                    if let enumerator = fm.enumerator(
+                        at: blobsURL,
+                        includingPropertiesForKeys: [URLResourceKey.fileSizeKey],
+                        options: [.skipsHiddenFiles]
+                    ) {
+                        // Use nextObject() — NSEnumerator.makeIterator is unavailable in async context
+                        while let url = enumerator.nextObject() as? URL {
+                            guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink != true else { continue }
+                            guard let size = (try? url.resourceValues(forKeys: [URLResourceKey.fileSizeKey]))?.fileSize else { continue }
+                            let fileBytes = Int64(size)
+                            let key = url.lastPathComponent
+                            curSizes[key] = fileBytes
+
+                            if key.hasSuffix(".incomplete") {
+                                maxBytes = max(maxBytes, fileBytes)
+                            } else if fileBytes > 1_000_000, fileBytes < expectedBytes {
+                                if fileBytes > (prevSizes[key] ?? 0) {
+                                    maxBytes = max(maxBytes, fileBytes)
+                                }
+                            }
+                        }
+                    }
+                    prevSizes = curSizes
+
+                    if maxBytes > 0 {
+                        continuation.yield(min(Double(maxBytes) / Double(expectedBytes), 0.99))
+                    }
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
+                continuation.finish()
+            }
+        }
+    }
+
+    // MARK: - Model ref parsing
+
     static func hfModelRef(repoId: String, fileName: String) -> String {
         let stem = String(fileName.dropLast(".gguf".count))
         let stemLower = stem.lowercased()
