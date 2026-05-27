@@ -39,14 +39,14 @@ final class SDKChatService: ChatServiceProtocol, @unchecked Sendable {
                     return
                 }
 
-                var sdkMessages: [ChatMessage] = []
+                var sdkMessages: [MeshLLM.ChatMessage] = []
                 let trimmed = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
-                    sdkMessages.append(ChatMessage(role: "system", content: trimmed))
+                    sdkMessages.append(MeshLLM.ChatMessage(role: "system", content: trimmed))
                 }
-                sdkMessages.append(contentsOf: messages.map { ChatMessage(role: $0.role, content: $0.content) })
+                sdkMessages.append(contentsOf: messages.map { MeshLLM.ChatMessage(role: $0.role, content: $0.content) })
 
-                let request = ChatRequest(model: model, messages: sdkMessages)
+                let request = MeshLLM.ChatRequest(model: model, messages: sdkMessages)
                 let sdkStream = inference.chat(request)
 
                 do {
