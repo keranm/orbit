@@ -28,7 +28,7 @@ final class AppState {
     var showFeedbackRequest = false
 
     /// Persisted ExploreViewModel so context survives navigation switches.
-    var exploreViewModel = ExploreViewModel()
+    var exploreViewModel: ExploreViewModel
 
     /// Shared reference for components that need the active model ref but
     /// can't hold an injected AppState (e.g. NovaOverlayViewController).
@@ -39,10 +39,12 @@ final class AppState {
     init() {
         let rm = RuntimeAdapter()
         runtimeManager = rm
+        let sdkService = SDKChatService(rm)
         mobileAccessCoordinator = MobileAccessCoordinator(
             runtimeManager: rm,
-            chatService: ChatService()
+            chatService: sdkService
         )
+        exploreViewModel = ExploreViewModel(chatService: sdkService)
     }
 }
 

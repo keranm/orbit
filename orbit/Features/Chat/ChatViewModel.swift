@@ -52,7 +52,13 @@ final class ChatViewModel {
         self.chat = chat
         self.modelContext = modelContext
         self.appState = appState
-        self.service = service ?? ChatService()
+        if let service {
+            self.service = service
+        } else if let appState {
+            self.service = SDKChatService(appState.runtimeManager)
+        } else {
+            self.service = ChatService()
+        }
         refreshMessages()
     }
 
@@ -108,23 +114,6 @@ final class ChatViewModel {
         }
     }
 
-    /// Polls /readyz until the HTTP serving layer on port 9337 actually accepts
-    /// connections. Used after a connection-refused failure to avoid a fixed sleep.
-    private func waitForHttpServingReady() async {
-        guard let url = URL(string: "http://localhost:9337/readyz") else { return }
-        var attempts = 0
-        while attempts < 60 { // up to 30 seconds
-            attempts += 1
-            var req = URLRequest(url: url, timeoutInterval: 2)
-            req.httpMethod = "GET"
-            if let (_, resp) = try? await URLSession.shared.data(for: req),
-               (resp as? HTTPURLResponse)?.statusCode == 200 {
-                return
-            }
-            try? await Task.sleep(for: .milliseconds(500))
-        }
-    }
-
     private func streamResponse() async {
         appState?.novaState = .thinking
         isStreaming = true
@@ -176,80 +165,60 @@ final class ChatViewModel {
         var firstTokenTime: Date?
 
         streamTask = Task {
-            var attempt = 0
-            while attempt < 2 {
-                attempt += 1
-                do {
-                    let stream = service.streamCompletion(
-                        messages: history,
-                        model: modelRef,
-                        systemPrompt: systemMessage
-                    )
-                    appState?.novaState = .responding
+            do {
+                let stream = service.streamCompletion(
+                    messages: history,
+                    model: modelRef,
+                    systemPrompt: systemMessage
+                )
+                appState?.novaState = .responding
 
-                    for try await event in stream {
-                        guard !Task.isCancelled else { break }
+                for try await event in stream {
+                    guard !Task.isCancelled else { break }
 
-                        switch event {
-                        case .token(let token):
-                            if firstTokenTime == nil { firstTokenTime = Date() }
-                            assistantMsg.content += token
-                        case .done(let promptTokens, let completionTokens):
-                            assistantMsg.tokenCount = completionTokens
-                            assistantMsg.promptTokenCount = promptTokens
-                            if let ft = firstTokenTime {
-                                assistantMsg.inferenceLatency = ft.timeIntervalSince(sendTime)
-                            }
-                            assistantMsg.wasLocalInference = true
+                    switch event {
+                    case .token(let token):
+                        if firstTokenTime == nil { firstTokenTime = Date() }
+                        assistantMsg.content += token
+                    case .done(let promptTokens, let completionTokens):
+                        assistantMsg.tokenCount = completionTokens
+                        assistantMsg.promptTokenCount = promptTokens
+                        if let ft = firstTokenTime {
+                            assistantMsg.inferenceLatency = ft.timeIntervalSince(sendTime)
                         }
+                        assistantMsg.wasLocalInference = true
                     }
+                }
 
-                    guard !Task.isCancelled else {
-                        assistantMsg.isStreaming = false
-                        assistantMsg.isInterrupted = true
-                        save(); refreshMessages()
-                        isStreaming = false
-                        appState?.novaState = .idle
-                        return
-                    }
-
+                guard !Task.isCancelled else {
                     assistantMsg.isStreaming = false
-                    assistantMsg.isInterrupted = false
-                    chat.updatedAt = .now
-                    save()
-                    refreshMessages()
-
+                    assistantMsg.isInterrupted = true
+                    save(); refreshMessages()
                     isStreaming = false
-                    appState?.novaState = .success
-                    try? await Task.sleep(for: .seconds(2))
-                    if appState?.novaState == .success { appState?.novaState = .idle }
-                    return
-
-                } catch {
-                    // On first attempt: if the server wasn't ready yet (ECONNREFUSED
-                    // or mid-stream drop before any tokens), poll /readyz until the
-                    // HTTP layer accepts connections, then retry once.
-                    if attempt == 1, firstTokenTime == nil,
-                       let ue = error as? URLError,
-                       ue.code == .networkConnectionLost || ue.code == .cannotConnectToHost {
-                        appState?.novaState = .thinking
-                        assistantMsg.content = ""
-                        await waitForHttpServingReady()
-                        guard !Task.isCancelled else { break }
-                        continue
-                    }
-
-                    assistantMsg.isStreaming = false
-                    // Keep partial content if any arrived
-                    assistantMsg.isInterrupted = assistantMsg.content.isEmpty
-                    save()
-                    refreshMessages()
-
-                    isStreaming = false
-                    streamError = userFacingError(error)
-                    appState?.novaState = .error
+                    appState?.novaState = .idle
                     return
                 }
+
+                assistantMsg.isStreaming = false
+                assistantMsg.isInterrupted = false
+                chat.updatedAt = .now
+                save()
+                refreshMessages()
+
+                isStreaming = false
+                appState?.novaState = .success
+                try? await Task.sleep(for: .seconds(2))
+                if appState?.novaState == .success { appState?.novaState = .idle }
+
+            } catch {
+                assistantMsg.isStreaming = false
+                assistantMsg.isInterrupted = assistantMsg.content.isEmpty
+                save()
+                refreshMessages()
+
+                isStreaming = false
+                streamError = userFacingError(error)
+                appState?.novaState = .error
             }
         }
         await streamTask?.value
@@ -273,12 +242,9 @@ final class ChatViewModel {
 
     private func userFacingError(_ error: Error) -> String {
         if let ce = error as? ChatError { return ce.errorDescription ?? "Response interrupted" }
-        if let ue = error as? URLError {
-            if ue.code == .cancelled { return "" }
-            if ue.code == .cannotConnectToHost || ue.code == .networkConnectionLost {
-                return "Connection lost — Orbit is reconnecting…"
-            }
-        }
-        return "Response interrupted"
+        if let ue = error as? URLError, ue.code == .cancelled { return "" }
+        let desc = error.localizedDescription
+        if desc.isEmpty { return "Response interrupted" }
+        return desc
     }
 }

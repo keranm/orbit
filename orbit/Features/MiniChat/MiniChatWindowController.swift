@@ -17,7 +17,7 @@ final class NovaOverlayViewController {
 
     private var panel: BorderlessKeyPanel?
     private var previousApp: NSRunningApplication?
-    private let viewModel = MiniChatPanelViewModel()
+    private let viewModel = MiniChatPanelViewModel(service: SDKChatService())
 
     // MARK: - Init
 

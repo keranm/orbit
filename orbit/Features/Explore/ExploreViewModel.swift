@@ -3,7 +3,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class ExploreViewModel {
-    let chatService: ChatService
+    let chatService: any ChatServiceProtocol
 
     var rootURL: URL?
     var treeItems: [ExploreTreeItem] = []
@@ -35,7 +35,7 @@ final class ExploreViewModel {
     var assistantInput: String = ""
     var assistantIsStreaming: Bool = false
 
-    init(chatService: ChatService? = nil) {
+    init(chatService: (any ChatServiceProtocol)? = nil) {
         self.chatService = chatService ?? ChatService()
     }
 
