@@ -114,7 +114,7 @@ struct ChooseExperienceStep: View {
     }
 
     private func tierCard(_ tier: OnboardingViewModel.ExperienceTier) -> some View {
-        let isSelected = viewModel.selectedTier == tier
+        let isSelected = viewModel.selectedTier == tier && viewModel.selectedExistingModel == nil
 
         return Button {
             withAnimation(.spring(duration: 0.2)) {

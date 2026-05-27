@@ -159,61 +159,80 @@ final class ChatViewModel {
         var firstTokenTime: Date?
 
         streamTask = Task {
-            do {
-                let stream = service.streamCompletion(
-                    messages: history,
-                    model: modelRef,
-                    systemPrompt: systemMessage
-                )
-                appState?.novaState = .responding
+            var attempt = 0
+            while attempt < 2 {
+                attempt += 1
+                do {
+                    let stream = service.streamCompletion(
+                        messages: history,
+                        model: modelRef,
+                        systemPrompt: systemMessage
+                    )
+                    appState?.novaState = .responding
 
-                for try await event in stream {
-                    guard !Task.isCancelled else { break }
+                    for try await event in stream {
+                        guard !Task.isCancelled else { break }
 
-                    switch event {
-                    case .token(let token):
-                        if firstTokenTime == nil { firstTokenTime = Date() }
-                        assistantMsg.content += token
-                    case .done(let promptTokens, let completionTokens):
-                        assistantMsg.tokenCount = completionTokens
-                        assistantMsg.promptTokenCount = promptTokens
-                        if let ft = firstTokenTime {
-                            assistantMsg.inferenceLatency = ft.timeIntervalSince(sendTime)
+                        switch event {
+                        case .token(let token):
+                            if firstTokenTime == nil { firstTokenTime = Date() }
+                            assistantMsg.content += token
+                        case .done(let promptTokens, let completionTokens):
+                            assistantMsg.tokenCount = completionTokens
+                            assistantMsg.promptTokenCount = promptTokens
+                            if let ft = firstTokenTime {
+                                assistantMsg.inferenceLatency = ft.timeIntervalSince(sendTime)
+                            }
+                            assistantMsg.wasLocalInference = true
                         }
-                        assistantMsg.wasLocalInference = true
                     }
-                }
 
-                guard !Task.isCancelled else {
+                    guard !Task.isCancelled else {
+                        assistantMsg.isStreaming = false
+                        assistantMsg.isInterrupted = true
+                        save(); refreshMessages()
+                        isStreaming = false
+                        appState?.novaState = .idle
+                        return
+                    }
+
                     assistantMsg.isStreaming = false
-                    assistantMsg.isInterrupted = true
-                    save(); refreshMessages()
+                    assistantMsg.isInterrupted = false
+                    chat.updatedAt = .now
+                    save()
+                    refreshMessages()
+
                     isStreaming = false
-                    appState?.novaState = .idle
+                    appState?.novaState = .success
+                    try? await Task.sleep(for: .seconds(2))
+                    if appState?.novaState == .success { appState?.novaState = .idle }
+                    return
+
+                } catch {
+                    // On first attempt: if the connection dropped before any tokens
+                    // arrived (model still warming up after onboarding), retry once
+                    // after a short delay rather than surfacing the error immediately.
+                    if attempt == 1, firstTokenTime == nil,
+                       let ue = error as? URLError,
+                       ue.code == .networkConnectionLost || ue.code == .cannotConnectToHost {
+                        appState?.novaState = .thinking
+                        assistantMsg.content = ""
+                        try? await Task.sleep(for: .seconds(3))
+                        guard !Task.isCancelled else { break }
+                        continue
+                    }
+
+                    assistantMsg.isStreaming = false
+                    // Keep partial content if any arrived
+                    assistantMsg.isInterrupted = assistantMsg.content.isEmpty
+                    save()
+                    refreshMessages()
+
+                    isStreaming = false
+                    streamError = userFacingError(error)
+                    appState?.novaState = .error
                     return
                 }
-
-                assistantMsg.isStreaming = false
-                assistantMsg.isInterrupted = false
-                chat.updatedAt = .now
-                save()
-                refreshMessages()
-
-                isStreaming = false
-                appState?.novaState = .success
-                try? await Task.sleep(for: .seconds(2))
-                if appState?.novaState == .success { appState?.novaState = .idle }
-
-            } catch {
-                assistantMsg.isStreaming = false
-                // Keep partial content if any arrived
-                assistantMsg.isInterrupted = assistantMsg.content.isEmpty
-                save()
-                refreshMessages()
-
-                isStreaming = false
-                streamError = userFacingError(error)
-                appState?.novaState = .error
             }
         }
         await streamTask?.value
