@@ -253,12 +253,14 @@ struct AgentRunnerView: View {
 
         runTask = Task {
             var startTimes: [Int: Date] = [:]
+            let service = SDKChatService(appState.runtimeManager)
             do {
                 for try await event in AgentExecutionService.run(
                     agent: agent,
                     userInput: userInput,
                     modelRef: modelRef,
-                    modelContext: modelContext
+                    modelContext: modelContext,
+                    service: service
                 ) {
                     await MainActor.run {
                         switch event {

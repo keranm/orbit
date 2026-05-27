@@ -9,7 +9,8 @@ struct AgentExecutionService {
         agent: Agent,
         userInput: String,
         modelRef: String,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        service: any ChatServiceProtocol
     ) -> AsyncThrowingStream<AgentProgress, Error> {
         AsyncThrowingStream { continuation in
             Task {
@@ -18,6 +19,7 @@ struct AgentExecutionService {
                     userInput: userInput,
                     modelRef: modelRef,
                     modelContext: modelContext,
+                    service: service,
                     continuation: continuation
                 )
             }
@@ -31,6 +33,7 @@ struct AgentExecutionService {
         userInput: String,
         modelRef: String,
         modelContext: ModelContext,
+        service: any ChatServiceProtocol,
         continuation: AsyncThrowingStream<AgentProgress, Error>.Continuation
     ) async {
         let run = AgentRun(agentID: agent.id)
@@ -81,11 +84,11 @@ struct AgentExecutionService {
 
                 case .think:
                     let cfg = step.decodedConfig(ThinkStepConfig.self) ?? ThinkStepConfig()
-                    output = try await runThink(cfg: cfg, stepContext: stepContext, userInput: userInput, modelRef: modelRef, continuation: continuation)
+                    output = try await runThink(cfg: cfg, stepContext: stepContext, userInput: userInput, modelRef: modelRef, service: service, continuation: continuation)
 
                 case .condition:
                     let cfg = step.decodedConfig(ConditionStepConfig.self) ?? ConditionStepConfig()
-                    let passed = try await runCondition(cfg: cfg, stepContext: stepContext, modelRef: modelRef)
+                    let passed = try await runCondition(cfg: cfg, stepContext: stepContext, modelRef: modelRef, service: service)
                     if !passed && cfg.skipNextIfFalse {
                         skippedSteps.insert(step.order + 1)
                     }
@@ -136,6 +139,7 @@ struct AgentExecutionService {
         stepContext: [Int: String],
         userInput: String,
         modelRef: String,
+        service: any ChatServiceProtocol,
         continuation: AsyncThrowingStream<AgentProgress, Error>.Continuation
     ) async throws -> String {
         let resolvedPrompt = substitute(
@@ -144,7 +148,6 @@ struct AgentExecutionService {
             userInput: userInput
         )
 
-        let service = ChatService()
         let activeModel = cfg.modelRef.isEmpty ? modelRef : cfg.modelRef
         let messages = [ChatRequestMessage(role: "user", content: resolvedPrompt)]
 
@@ -179,7 +182,8 @@ struct AgentExecutionService {
     private static func runCondition(
         cfg: ConditionStepConfig,
         stepContext: [Int: String],
-        modelRef: String
+        modelRef: String,
+        service: any ChatServiceProtocol
     ) async throws -> Bool {
         let inputText = stepContext[cfg.inputStepOrder] ?? ""
         guard !cfg.evaluationPrompt.isEmpty else { return true }
@@ -193,7 +197,6 @@ Question: \(cfg.evaluationPrompt)
 
 Answer with only "yes" or "no".
 """
-        let service = ChatService()
         let messages = [ChatRequestMessage(role: "user", content: prompt)]
         var answer = ""
 
