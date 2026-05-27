@@ -57,7 +57,21 @@ final class RuntimeAdapter {
 
     func detectInstall() async {
         installedVersion = "0.66.0"
-        status = .noModelConfigured
+
+        // Scan the HuggingFace cache so the onboarding "Choose Model" screen
+        // can show already-downloaded models without starting the node.
+        let cached = scanHuggingFaceCacheForModels()
+        installedModels = cached
+
+        // Restore the last-used model ref if it's still on disk.
+        if let stored = UserDefaults.standard.string(forKey: "orbit.lastActiveModelRef"),
+           cached.contains(where: { $0.ref == stored || $0.name == stored }) {
+            activeModelRef = stored
+        } else {
+            activeModelRef = cached.first.map { $0.ref ?? $0.name }
+        }
+
+        status = activeModelRef != nil ? .noModelConfigured : .noModelConfigured
     }
 
     func ensureRunning() async {

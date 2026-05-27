@@ -334,14 +334,10 @@ final class OnboardingViewModel {
             }
             guard !Task.isCancelled else { return }
 
-            // If picking an already-installed model, just configure it
+            // If picking an already-installed model, skip the download entirely
+            // and store the ref so startServing() loads the right model.
             if selectedExistingModel != nil {
-                do {
-                    try rm.ensureModelConfigured(modelRef)
-                } catch {
-                    downloadState = .failed("Couldn't configure the model.")
-                    return
-                }
+                downloadedModelRef = modelRef
                 downloadProgress = 1.0
                 downloadState = .completed
                 finishDownload()
