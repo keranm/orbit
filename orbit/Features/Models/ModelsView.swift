@@ -510,7 +510,9 @@ private struct MeshModelRow: View {
         .padding(.vertical, OSpacing.sm)
         .background(isHovered ? Color.oSurface.opacity(0.6) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: ORadius.md))
+        .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .onTapGesture { if !isActive { onUse() } }
         .animation(.easeInOut(duration: 0.12), value: isHovered)
     }
 }

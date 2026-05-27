@@ -122,9 +122,21 @@ final class ChatService: ChatServiceProtocol {
                               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
 
                         if let choices = json["choices"] as? [[String: Any]],
-                           let delta = choices.first?["delta"] as? [String: Any],
-                           let content = delta["content"] as? String, !content.isEmpty {
-                            continuation.yield(.token(content))
+                           let first = choices.first {
+                            if let delta = first["delta"] as? [String: Any],
+                               let content = delta["content"] as? String, !content.isEmpty {
+                                continuation.yield(.token(content))
+                            }
+                            // finish_reason signals end even if [DONE] never arrives
+                            if let finishReason = first["finish_reason"] as? String, !finishReason.isEmpty {
+                                if let usage = json["usage"] as? [String: Any] {
+                                    promptTokens = usage["prompt_tokens"] as? Int
+                                    completionTokens = usage["completion_tokens"] as? Int
+                                }
+                                continuation.yield(.done(promptTokens: promptTokens, completionTokens: completionTokens))
+                                continuation.finish()
+                                return
+                            }
                         }
                         if let usage = json["usage"] as? [String: Any] {
                             promptTokens = usage["prompt_tokens"] as? Int

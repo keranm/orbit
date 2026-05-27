@@ -48,11 +48,12 @@ final class RuntimeAdapter {
 
     private(set) var node: Node?
     private var nodeTask: Task<Void, Never>?
-
-    /// Separate Client handle used for mesh inference.
-    /// Node.inference.chat() requires a configured API base URL for remote peer
-    /// routing; Client.inference.chat() (MeshClientHandle) handles this correctly.
     private(set) var meshClient: Client?
+
+    /// Background `mesh-llm serve --join <token> --client` process that provides
+    /// the HTTP API at port 9337 for mesh inference routing. The SDK's MeshClient
+    /// cannot route to mesh peers without an HTTP relay — this sidecar IS that relay.
+    private(set) var meshServeProcess: Process?
 
     // MARK: - Init
 
@@ -245,7 +246,9 @@ final class RuntimeAdapter {
             try await client.start()
             meshClient = client
 
+            startMeshServeProcess(inviteToken: inviteToken)
             meshConnectionState = .connectedPrivate(peerCount: 0)
+            startMonitoring()
             Task { await refreshMeshModels() }
         } catch {
             meshConnectionState = .error(error.localizedDescription)
@@ -272,7 +275,9 @@ final class RuntimeAdapter {
             )
             meshClient = client
 
+            startMeshServeProcess(publicAuto: true)
             meshConnectionState = .connectedPublic(peerCount: 0)
+            startMonitoring()
 
             // Pre-populate from discovery data so Models tab shows something immediately,
             // even if the SDK's listModels() hasn't synced yet after a fresh join.
@@ -294,12 +299,72 @@ final class RuntimeAdapter {
     }
 
     func leaveMesh() async {
+        stopMeshServeProcess()
         await meshClient?.stop()
         meshClient = nil
-        await stop()
-        status = .noModelConfigured
         meshConnectionState = .disconnected
         meshModels = []
+        await stop()
+        // Restart local inference — stop() nukes the node, so we need to bring it back.
+        await start()
+    }
+
+    // MARK: - Mesh serve sidecar
+
+    /// Spawns `mesh-llm serve --join <token> --client --headless` so the SDK's
+    /// MeshClient has an HTTP relay at localhost:9337 for mesh inference routing.
+    func restartMeshSidecar() {
+        switch meshConnectionState {
+        case .connectedPublic:
+            startMeshServeProcess(publicAuto: true)
+        case .connectedPrivate:
+            startMeshServeProcess(inviteToken: localInviteToken)
+        default:
+            break
+        }
+    }
+
+    private func startMeshServeProcess(inviteToken: String? = nil, publicAuto: Bool = false) {
+        stopMeshServeProcess()
+        guard let binary = findBinaryPath() else { return }
+
+        var args: [String] = ["serve", "--client", "--headless", "--port", "9337"]
+        if let token = inviteToken {
+            args += ["--join", token]
+        } else if publicAuto {
+            args += ["--auto"]
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = args
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            meshServeProcess = process
+            setenv("MESH_CLIENT_API_BASE", "http://localhost:9337", 1)
+        } catch {
+            meshServeProcess = nil
+        }
+    }
+
+    private func stopMeshServeProcess() {
+        if let p = meshServeProcess {
+            p.terminate()
+            meshServeProcess = nil
+        }
+        unsetenv("MESH_CLIENT_API_BASE")
+    }
+
+    private func findBinaryPath() -> String? {
+        let candidates = [
+            ("~/.local/bin/mesh-bundle/mesh-llm" as NSString).expandingTildeInPath,
+            ("~/.local/bin/mesh-llm" as NSString).expandingTildeInPath,
+            ("~/.cargo/bin/mesh-llm" as NSString).expandingTildeInPath,
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     func selectMeshModel(_ model: MeshModelEntry) {
@@ -465,10 +530,34 @@ final class RuntimeAdapter {
         nodeTask?.cancel()
         nodeTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self, let node else { break }
-                let s = await node.status()
-                if s.connected {
-                    self.status = .ready
+                guard let self else { break }
+                if let node = self.node {
+                    let s = await node.status()
+                    if s.connected {
+                        self.status = .ready
+                        switch self.meshConnectionState {
+                        case .connectedPublic:
+                            self.meshConnectionState = .connectedPublic(peerCount: s.peerCount)
+                        case .connectedPrivate:
+                            self.meshConnectionState = .connectedPrivate(peerCount: s.peerCount)
+                        default:
+                            break
+                        }
+                    }
+                }
+                // Revive the mesh sidecar if it exited while still on a mesh.
+                switch self.meshConnectionState {
+                case .connectedPublic:
+                    if self.meshServeProcess?.isRunning != true {
+                        self.startMeshServeProcess(publicAuto: true)
+                    }
+                case .connectedPrivate:
+                    if self.meshServeProcess?.isRunning != true,
+                       let token = self.localInviteToken {
+                        self.startMeshServeProcess(inviteToken: token)
+                    }
+                default:
+                    break
                 }
                 try? await Task.sleep(for: .seconds(5))
             }

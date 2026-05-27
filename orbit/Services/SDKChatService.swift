@@ -1,36 +1,16 @@
 import Foundation
 import MeshLLM
 
-/// Chat service that drives inference through the MeshLLM SDK's native in-process
-/// API. The SDK does not expose an HTTP server on port 9337 — all inference is FFI.
-///
-/// For local models: uses node.inference.chat() (MeshNodeHandle).
-/// For mesh models: uses meshClient.inference.chat() (MeshClientHandle) — the Node
-/// handle requires a configured API base URL for remote peer routing; the Client
-/// handle handles this correctly.
-///
-/// Pass a RuntimeAdapter at init for direct injection. If nil, the adapter is
-/// resolved lazily from AppState.current at call time — safe for singletons like
-/// NovaOverlayViewController that initialize before AppState is ready.
+/// Routes inference to the right backend:
+/// - Local models: SDK in-process FFI via node.inference.chat() (EmbeddedServingController)
+/// - Mesh models:  HTTP SSE to the mesh-llm serve sidecar at localhost:9337
+///   (the SDK's MeshClient.chat() hardcodes stream:false/max_tokens:64 — unusable for chat)
 final class SDKChatService: ChatServiceProtocol, @unchecked Sendable {
     private let adapter: RuntimeAdapter?
+    private let httpService = ChatService()
 
     init(_ adapter: RuntimeAdapter? = nil) {
         self.adapter = adapter
-    }
-
-    // Abstracts over Node.Inference and Client.Inference which share the same
-    // chat() signature but are different concrete types backed by different FFI handles.
-    private enum InferenceProvider {
-        case node(Node.Inference)
-        case client(Client.Inference)
-
-        func chat(_ request: MeshLLM.ChatRequest) -> AsyncThrowingStream<MeshLLM.Event, Error> {
-            switch self {
-            case .node(let n):   return n.chat(request)
-            case .client(let c): return c.chat(request)
-            }
-        }
     }
 
     func streamCompletion(
@@ -44,7 +24,7 @@ final class SDKChatService: ChatServiceProtocol, @unchecked Sendable {
         presencePenalty: Double?,
         user: String?
     ) -> AsyncThrowingStream<StreamEvent, Error> {
-        AsyncThrowingStream { continuation in
+        AsyncThrowingStream<StreamEvent, Error>(bufferingPolicy: .unbounded) { continuation in
             Task {
                 let effectiveAdapter: RuntimeAdapter?
                 if let a = self.adapter {
@@ -57,17 +37,39 @@ final class SDKChatService: ChatServiceProtocol, @unchecked Sendable {
                     return
                 }
 
-                // Prefer meshClient (Client.inference) when on mesh — Node.inference
-                // requires an API base URL for remote peer routing and will error.
-                let provider: InferenceProvider
-                let (meshInference, nodeInference) = await MainActor.run {
-                    (effectiveAdapter.meshClient?.inference, effectiveAdapter.node?.inference)
+                // Connection state is the authoritative routing signal.
+                // meshServeProcess.isRunning can be stale if sidecar crashed — don't rely on it alone.
+                let onMesh = await MainActor.run(body: {
+                    switch effectiveAdapter.meshConnectionState {
+                    case .connectedPublic, .connectedPrivate: return true
+                    default: return false
+                    }
+                })
+                if onMesh {
+                    // Ensure the HTTP sidecar is up before we attempt the request.
+                    let sidecarRunning = await MainActor.run(body: { effectiveAdapter.meshServeProcess?.isRunning == true })
+                    if !sidecarRunning {
+                        await MainActor.run(body: { effectiveAdapter.restartMeshSidecar() })
+                        try? await Task.sleep(for: .milliseconds(800))
+                    }
+                    let httpStream = self.httpService.streamCompletion(
+                        messages: messages, model: model, systemPrompt: systemPrompt,
+                        temperature: temperature, topP: topP, maxTokens: maxTokens,
+                        frequencyPenalty: frequencyPenalty, presencePenalty: presencePenalty,
+                        user: user)
+                    do {
+                        for try await event in httpStream {
+                            guard !Task.isCancelled else { continuation.finish(); return }
+                            continuation.yield(event)
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                    return
                 }
-                if let mi = meshInference {
-                    provider = .client(mi)
-                } else if let ni = nodeInference {
-                    provider = .node(ni)
-                } else {
+
+                guard let inference = await MainActor.run(body: { effectiveAdapter.node?.inference }) else {
                     continuation.finish(throwing: ChatError.runtimeNotReady)
                     return
                 }
@@ -80,7 +82,7 @@ final class SDKChatService: ChatServiceProtocol, @unchecked Sendable {
                 sdkMessages.append(contentsOf: messages.map { MeshLLM.ChatMessage(role: $0.role, content: $0.content) })
 
                 let request = MeshLLM.ChatRequest(model: model, messages: sdkMessages)
-                let sdkStream = provider.chat(request)
+                let sdkStream = inference.chat(request)
 
                 do {
                     for try await event in sdkStream {

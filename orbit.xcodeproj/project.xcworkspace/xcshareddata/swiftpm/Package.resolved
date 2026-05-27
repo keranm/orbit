@@ -1,0 +1,24 @@
+{
+  "originHash" : "375c513fdc0c5aa486a729399905747e64aef9c40c88fa9d75d732dd81691ce5",
+  "pins" : [
+    {
+      "identity" : "mesh-llm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Mesh-LLM/mesh-llm",
+      "state" : {
+        "revision" : "47e670808b2401ad6f288ebeb5d07fadf32d1bb3",
+        "version" : "0.67.0"
+      }
+    },
+    {
+      "identity" : "sparkle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sparkle-project/Sparkle",
+      "state" : {
+        "revision" : "6276ba2b404829d139c45ff98427cf90e2efc59b",
+        "version" : "2.9.2"
+      }
+    }
+  ],
+  "version" : 3
+}

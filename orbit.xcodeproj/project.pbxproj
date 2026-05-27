@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		068382FC2FC6D6B800FEECA2 /* MeshLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 111122223333444455556666 /* MeshLLM */; };
+		068382FD2FC6D6B800FEECA2 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 7777888899990000AAAABBBB /* Sparkle */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		A1B2C3D4E5F60006A1B2C3D4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				068382FD2FC6D6B800FEECA2 /* Sparkle in Frameworks */,
+				068382FC2FC6D6B800FEECA2 /* MeshLLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -190,11 +197,11 @@
 			);
 			mainGroup = 0624346F2FBAD1900072DF1E;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			packageReferences = (
 				ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */,
 				DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
+			preferredProjectObjectVersion = 77;
 			productRefGroup = 062434792FBAD1900072DF1E /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -274,40 +281,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-
-
-/* Begin XCRemoteSwiftPackageReference section */
-		ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Mesh-LLM/mesh-llm";
-			requirement = {
-				kind = exactVersion;
-				version = 0.67.0;
-			};
-		};
-		DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.9.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		111122223333444455556666 /* MeshLLM */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = MeshLLM;
-			package = ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */;
-		};
-		7777888899990000AAAABBBB /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Sparkle;
-			package = DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference */;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXTargetDependency section */
 		A1B2C3D4E5F60007A1B2C3D4 /* PBXTargetDependency */ = {
@@ -422,6 +395,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -431,7 +405,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				EXCLUDED_ARCHS = x86_64;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -450,8 +423,8 @@
 				DEVELOPMENT_TEAM = AUEPCDGA5G;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Orbit reads Mail to include emails in agent briefings. All processing happens locally.";
@@ -490,8 +463,8 @@
 				DEVELOPMENT_TEAM = AUEPCDGA5G;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_ARCHS = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
@@ -637,6 +610,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Mesh-LLM/mesh-llm";
+			requirement = {
+				kind = exactVersion;
+				version = 0.67.0;
+			};
+		};
+		DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		111122223333444455556666 /* MeshLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ABCD1234ABCD1234ABCD1234 /* XCRemoteSwiftPackageReference "mesh-llm" */;
+			productName = MeshLLM;
+		};
+		7777888899990000AAAABBBB /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 062434702FBAD1900072DF1E /* Project object */;
 }
