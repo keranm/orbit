@@ -5,15 +5,14 @@ struct CompleteStep: View {
     var onComplete: () -> Void
 
     var body: some View {
-        VStack(spacing: OSpacing.lg) {
-            Spacer(minLength: 0)
-
+        VStack(spacing: OSpacing.md) {
             // Nova — celebrating with confetti
             CharacterPoseView(poseName: "Celebrating", showConfetti: true)
                 .accessibilityHidden(true)
+                .padding(.bottom, OSpacing.xs)
 
             // Heading
-            VStack(spacing: OSpacing.sm) {
+            VStack(spacing: OSpacing.xs) {
                 Text("You're all set!")
                     .font(.oTitle1)
                     .foregroundStyle(Color.oTextPrimary)
@@ -51,6 +50,7 @@ struct CompleteStep: View {
                 RoundedRectangle(cornerRadius: ORadius.lg)
                     .fill(Color.oSurfaceSecondary)
             )
+            .padding(.top, OSpacing.xs)
 
             // CTA button
             Button(action: onComplete) {
@@ -70,11 +70,8 @@ struct CompleteStep: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("onboarding_start_orbit")
-
-            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, OSpacing.xxl)
     }
 
     private func summaryRow(icon: String, label: String, value: String) -> some View {
