@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Sparkle
 
 // macOS 26 (Xcode 26.5): any modifier or wrapper beyond .environment/.frame applied
 // to the WindowGroup content causes app.windows = 0 in XCUITest. The only safe
@@ -9,6 +10,11 @@ import SwiftData
 struct OrbitApp: App {
     @NSApplicationDelegateAdaptor(OrbitAppDelegate.self) private var appDelegate
     @State private var appState = AppState()
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
 
     /// Shared ModelContainer — created once, reused by both the main UI
     /// and the Mini-Chat overlay (which writes chats back into SwiftData).
@@ -109,6 +115,10 @@ struct OrbitApp: App {
                     .keyboardShortcut("n", modifiers: .command)
             }
             CommandGroup(replacing: .help) {
+                Button("Check for Updates…") {
+                    updaterController.checkForUpdates(nil)
+                }
+                Divider()
                 Button("Send Feedback…") {
                     AppState.current?.showFeedbackRequest = true
                 }

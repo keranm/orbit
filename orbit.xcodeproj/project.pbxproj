@@ -443,7 +443,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = orbit/Orbit.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = AUEPCDGA5G;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -454,6 +454,8 @@
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Orbit reads Mail to include emails in agent briefings. All processing happens locally.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Orbit reads your calendar to build agent briefings. All processing happens locally.";
 				INFOPLIST_KEY_NSRemindersUsageDescription = "Orbit reads your reminders to include them in agent workflows. All processing happens locally.";
+				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/keranm/orbit-release/main/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "0N8+0Z5XqMfyh0YH0stI9h7/7bf6qq0XmMzcQgXUzEQ=";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -481,7 +483,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = orbit/Orbit.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = AUEPCDGA5G;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -493,6 +495,8 @@
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Orbit reads Mail to include emails in agent briefings. All processing happens locally.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Orbit reads your calendar to build agent briefings. All processing happens locally.";
 				INFOPLIST_KEY_NSRemindersUsageDescription = "Orbit reads your reminders to include them in agent workflows. All processing happens locally.";
+				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/keranm/orbit-release/main/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "0N8+0Z5XqMfyh0YH0stI9h7/7bf6qq0XmMzcQgXUzEQ=";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -517,7 +521,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -537,7 +541,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -556,7 +560,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -575,7 +579,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
