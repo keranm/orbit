@@ -28,7 +28,12 @@ final class SDKChatService: ChatServiceProtocol, @unchecked Sendable {
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
-                let effectiveAdapter = self.adapter ?? (await MainActor.run { AppState.current?.runtimeManager })
+                let effectiveAdapter: RuntimeAdapter?
+                if let a = self.adapter {
+                    effectiveAdapter = a
+                } else {
+                    effectiveAdapter = await MainActor.run { AppState.current?.runtimeManager }
+                }
                 guard let effectiveAdapter else {
                     continuation.finish(throwing: ChatError.runtimeNotReady)
                     return
