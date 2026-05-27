@@ -9,4 +9,5 @@ enum AppRoute: Hashable {
     case prompts
     case models
     case settings
+    case easterEgg
 }

@@ -19,7 +19,14 @@ final class ModelsViewModel {
 
     // MARK: - Download queue: ref → current phase
 
-    private(set) var downloadQueue: [String: ModelDownloadService.Phase] = [:]
+    enum DownloadPhase: Equatable {
+        case resolving
+        case downloading(Double)
+        case done
+        case failed(String)
+    }
+
+    private(set) var downloadQueue: [String: DownloadPhase] = [:]
 
     // MARK: - Errors (inline, not modal)
 
@@ -38,22 +45,24 @@ final class ModelsViewModel {
 
     var showCatalog = false
 
+    // MARK: - Background download completion
+
+    private(set) var completedDownloadRef: String?
+    private(set) var completedDownloadName: String?
+
+    func dismissCompletedDownload() {
+        completedDownloadRef = nil
+        completedDownloadName = nil
+    }
+
     // MARK: - Private
 
     private var downloadTasks: [String: Task<Void, Never>] = [:]
 
     // MARK: - Load installed models
 
-    func loadInstalled(rm: RuntimeManager) async {
+    func loadInstalled(rm: RuntimeAdapter) async {
         guard !isLoadingInstalled else { return }
-
-        // If no binary is installed or the path doesn't exist, show empty state — not an error.
-        guard let bin = rm.binaryPath,
-              FileManager.default.isExecutableFile(atPath: bin.path) else {
-            installedModels = []
-            isLoadingInstalled = false
-            return
-        }
 
         isLoadingInstalled = true
         installedLoadError = nil
@@ -72,7 +81,7 @@ final class ModelsViewModel {
 
     // MARK: - Load recommended catalog
 
-    func loadRecommended(rm: RuntimeManager) async {
+    func loadRecommended(rm: RuntimeAdapter) async {
         guard !isLoadingCatalog else { return }
         isLoadingCatalog = true
         catalogLoadError = nil
@@ -81,27 +90,6 @@ final class ModelsViewModel {
         do {
             let models = try await rm.fetchRecommendedModels()
             recommendedModels = models
-        } catch let error as RuntimeError {
-            switch error {
-            case .catalogNetworkUnavailable:
-                catalogLoadError = "unavailable"
-                catalogErrorDetail = CatalogErrorDetail(
-                    technicalMessage: "Runtime reported: Cannot start a runtime from within a runtime (exit 101). This is a known limitation of the current runtime build.",
-                    isNetworkError: true
-                )
-            case .cliError(let msg):
-                catalogLoadError = "cli_error"
-                catalogErrorDetail = CatalogErrorDetail(
-                    technicalMessage: msg.isEmpty ? "CLI exited with an error and no output." : msg,
-                    isNetworkError: false
-                )
-            case .binaryNotFound:
-                catalogLoadError = "not_installed"
-                catalogErrorDetail = CatalogErrorDetail(
-                    technicalMessage: "The Orbit runtime binary could not be found.",
-                    isNetworkError: false
-                )
-            }
         } catch {
             catalogLoadError = "unknown"
             catalogErrorDetail = CatalogErrorDetail(
@@ -114,31 +102,103 @@ final class ModelsViewModel {
 
     // MARK: - Download
 
-    func startDownload(ref: String, rm: RuntimeManager) {
+    func startDownload(ref: String, rm: RuntimeAdapter) {
         guard downloadTasks[ref] == nil else { return }
         downloadQueue[ref] = .resolving
+        let modelName = recommendedModels.first { $0.ref == ref }?.name
+        let expectedBytes = parseSizeToBytes(recommendedModels.first { $0.ref == ref }?.size)
+        let cacheDir = rm.cacheDir
 
         downloadTasks[ref] = Task {
             defer { downloadTasks[ref] = nil }
-
-            let service = ModelDownloadService(cacheDir: rm.cacheDir)
-
             do {
-                for try await phase in service.download(ref: ref) {
-                    downloadQueue[ref] = phase
-                    if case .done = phase {
-                        try rm.ensureModelConfigured(ref)
-                        await loadInstalled(rm: rm)
-                        downloadQueue.removeValue(forKey: ref)
-                        break
-                    }
-                    if case .failed = phase {
-                        break
+                downloadQueue[ref] = .downloading(0)
+                // Poll the HuggingFace blob directory for real file-size progress
+                let progressTask: Task<Void, Never>? = expectedBytes.map { bytes in
+                    Task { [weak self] in
+                        await self?.pollDownloadProgress(ref: ref, expectedBytes: bytes, cacheDir: cacheDir)
                     }
                 }
+                defer { progressTask?.cancel() }
+
+                try await rm.downloadModel(ref: ref)
+                downloadQueue[ref] = .done
+                try rm.ensureModelConfigured(ref)
+                await loadInstalled(rm: rm)
+                if !showCatalog {
+                    completedDownloadRef = ref
+                    completedDownloadName = modelName
+                }
+                downloadQueue.removeValue(forKey: ref)
             } catch {
-                downloadQueue[ref] = .failed("Download stopped. Try again.")
+                if !Task.isCancelled {
+                    downloadQueue[ref] = .failed("Download stopped. Try again.")
+                }
             }
+        }
+    }
+
+    // MARK: - Download progress polling
+
+    private func parseSizeToBytes(_ sizeLabel: String?) -> Int64? {
+        guard let s = sizeLabel?.trimmingCharacters(in: .whitespaces).uppercased() else { return nil }
+        if s.hasSuffix("GB"), let v = Double(s.dropLast(2)) { return Int64(v * 1_000_000_000) }
+        if s.hasSuffix("MB"), let v = Double(s.dropLast(2)) { return Int64(v * 1_000_000) }
+        return nil
+    }
+
+    private func repoDirName(from ref: String) -> String? {
+        let repoPath = ref.contains(":") ? String(ref.split(separator: ":")[0]) : ref
+        let parts = repoPath.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        return "models--\(parts[0])--\(parts[1])"
+    }
+
+    private func pollDownloadProgress(ref: String, expectedBytes: Int64, cacheDir: String) async {
+        let fm = FileManager.default
+        let blobsURL: URL = {
+            if let dir = repoDirName(from: ref) {
+                return URL(fileURLWithPath: cacheDir).appendingPathComponent(dir).appendingPathComponent("blobs")
+            }
+            return URL(fileURLWithPath: cacheDir)
+        }()
+        var prevSizes: [String: Int64] = [:]
+
+        while !Task.isCancelled {
+            var maxBytes: Int64 = 0
+            var curSizes: [String: Int64] = [:]
+
+            if let enumerator = fm.enumerator(
+                at: blobsURL,
+                includingPropertiesForKeys: [URLResourceKey.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            ) {
+                for case let url as URL in enumerator {
+                    // Skip symlinks — we want actual blobs, not the snapshot symlinks
+                    guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink != true else { continue }
+                    guard let size = (try? url.resourceValues(forKeys: [URLResourceKey.fileSizeKey]))?.fileSize else { continue }
+                    let fileBytes = Int64(size)
+                    let key = url.lastPathComponent
+                    curSizes[key] = fileBytes
+
+                    if key.hasSuffix(".incomplete") {
+                        // Standard hf-hub naming for in-progress blobs
+                        maxBytes = max(maxBytes, fileBytes)
+                    } else if fileBytes > 1_000_000, fileBytes < expectedBytes {
+                        // Fallback: any large file that grew since last poll is likely an in-progress blob
+                        if fileBytes > (prevSizes[key] ?? 0) {
+                            maxBytes = max(maxBytes, fileBytes)
+                        }
+                    }
+                }
+            }
+            prevSizes = curSizes
+
+            if maxBytes > 0 {
+                let progress = min(Double(maxBytes) / Double(expectedBytes), 0.99)
+                downloadQueue[ref] = .downloading(progress)
+            }
+            try? await Task.sleep(for: .milliseconds(500))
         }
     }
 
@@ -148,7 +208,7 @@ final class ModelsViewModel {
         downloadQueue.removeValue(forKey: ref)
     }
 
-    func retryDownload(ref: String, rm: RuntimeManager) {
+    func retryDownload(ref: String, rm: RuntimeAdapter) {
         cancelDownload(ref: ref)
         startDownload(ref: ref, rm: rm)
     }
@@ -156,39 +216,32 @@ final class ModelsViewModel {
     // MARK: - Set active model
 
     /// Selects a mesh-served model. Does not restart the runtime.
-    func selectMeshModel(_ model: MeshModelEntry, rm: RuntimeManager) {
+    func selectMeshModel(_ model: MeshModelEntry, rm: RuntimeAdapter) {
         rm.selectMeshModel(model)
     }
 
-    func setActiveModel(_ model: InstalledModelEntry, rm: RuntimeManager) async {
+    func setActiveModel(_ model: InstalledModelEntry, rm: RuntimeAdapter) async {
         let ref = model.ref ?? model.name
 
         switch rm.status {
-        case .notInstalled:
-            // Binary is gone — nothing to start.
-            break
-        case .starting, .stopping:
-            // Already transitioning — wait for it to settle; don't interrupt.
+        case .notInstalled, .starting, .stopping:
             break
         case .ready:
-            // Runtime is up — full restart with the new model ref.
-            // rm.start(modelRef:) writes config.toml before launching.
-            await rm.stop()
-            await rm.start(modelRef: ref)
+            // Node is running — swap models without restarting the node.
+            await rm.loadModel(ref)
         case .offline, .noModelConfigured, .error:
-            // Runtime is idle or had no model. Start fresh with the selected model.
             await rm.start(modelRef: ref)
         }
     }
 
     // MARK: - Remove model
 
-    func removeModel(_ model: InstalledModelEntry, binaryPath: URL, rm: RuntimeManager) async {
+    func removeModel(_ model: InstalledModelEntry, rm: RuntimeAdapter) async {
         let ref = model.ref ?? model.name
         removeError = nil
 
         do {
-            try await ModelService().remove(binaryPath: binaryPath, ref: ref)
+            try await rm.deleteModel(ref: ref)
             await loadInstalled(rm: rm)
             if selectedModel?.id == model.id { selectedModel = nil }
         } catch {
@@ -208,7 +261,7 @@ final class ModelsViewModel {
 
     // MARK: - Helpers
 
-    func downloadPhase(for ref: String) -> ModelDownloadService.Phase? {
+    func downloadPhase(for ref: String) -> DownloadPhase? {
         downloadQueue[ref]
     }
 

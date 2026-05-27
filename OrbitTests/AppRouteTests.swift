@@ -34,25 +34,29 @@ final class AppRouteTests: XCTestCase {
 
     func test_all_routes_are_distinct() {
         let id = UUID()
-        let routes: [AppRoute] = [.newChat, .chat(id: id), .agents, .agentBuilder(id: id), .explore, .prompts, .models, .settings]
+        let routes: [AppRoute] = [.newChat, .chat(id: id), .agents, .agentBuilder(id: id), .explore, .prompts, .models, .settings, .easterEgg]
         let set = Set(routes)
-        XCTAssertEqual(set.count, 8)
+        XCTAssertEqual(set.count, 9)
     }
 
     func test_all_cases_exhaustive() {
         var count = 0
-        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .agents, .agentBuilder(id: UUID()), .explore, .prompts, .models, .settings]
+        let routes: [AppRoute] = [.newChat, .chat(id: UUID()), .agents, .agentBuilder(id: UUID()), .explore, .prompts, .models, .settings, .easterEgg]
         for route in routes {
             switch route {
-            case .newChat, .chat, .agents, .agentBuilder, .explore, .prompts, .models, .settings:
+            case .newChat, .chat, .agents, .agentBuilder, .explore, .prompts, .models, .settings, .easterEgg:
                 count += 1
             }
         }
-        XCTAssertEqual(count, 8)
+        XCTAssertEqual(count, 9)
     }
 
     func test_agents_route_is_hashable() {
         XCTAssertEqual(AppRoute.agents, AppRoute.agents)
+    }
+
+    func test_easterEgg_route_is_hashable() {
+        XCTAssertEqual(AppRoute.easterEgg, AppRoute.easterEgg)
     }
 
     func test_agentBuilder_equality_by_id() {
@@ -72,9 +76,10 @@ final class AppRouteTests: XCTestCase {
         map[.models]     = "models"
         map[.settings]   = "settings"
         map[.agents]     = "agents"
+        map[.easterEgg]  = "easterEgg"
         let id = UUID()
         map[.chat(id: id)]         = "chat"
         map[.agentBuilder(id: id)] = "agentBuilder"
-        XCTAssertEqual(map.count, 8)
+        XCTAssertEqual(map.count, 9)
     }
 }

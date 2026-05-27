@@ -101,8 +101,8 @@
 			buildPhases = (
 				062434742FBAD1900072DF1E /* Sources */,
 				062434752FBAD1900072DF1E /* Frameworks */,
-				062434882FBAD1900072DF1E /* Embed mesh-llm binary */,
 				062434762FBAD1900072DF1E /* Resources */,
+				AA11BB22CC33DD44EE55FF66 /* Strip Static XCFrameworks */,
 			);
 			buildRules = (
 			);
@@ -113,6 +113,8 @@
 			);
 			name = orbit;
 			packageProductDependencies = (
+				111122223333444455556666 /* MeshLLM */,
+				7777888899990000AAAABBBB /* Sparkle */,
 			);
 			productName = orbit;
 			productReference = 062434782FBAD1900072DF1E /* orbit.app */;
@@ -189,6 +191,10 @@
 			mainGroup = 0624346F2FBAD1900072DF1E;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			packageReferences = (
+				ABCD1234ABCD1234ABCD1234 /* XCLocalSwiftPackageReference */,
+				DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference */,
+			);
 			productRefGroup = 062434792FBAD1900072DF1E /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -225,7 +231,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		062434882FBAD1900072DF1E /* Embed mesh-llm binary */ = {
+		AA11BB22CC33DD44EE55FF66 /* Strip Static XCFrameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -233,25 +239,15 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/Resources/mesh-llm",
-				"$(SRCROOT)/Resources/rpc-server-metal",
-				"$(SRCROOT)/Resources/llama-server-metal",
-				"$(SRCROOT)/Resources/llama-moe-analyze",
-				"$(SRCROOT)/Resources/llama-moe-split",
 			);
-			name = "Embed mesh-llm binary";
+			name = "Strip Static XCFrameworks";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/mesh-llm",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/rpc-server-metal",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/llama-server-metal",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/llama-moe-analyze",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/llama-moe-split",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "for f in mesh-llm rpc-server-metal llama-server-metal llama-moe-analyze llama-moe-split; do\n  cp \"$SRCROOT/Resources/$f\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/$f\"\ndone\n";
+			shellPath = /bin/sh;
+			shellScript = "# MeshLLMFFI is a static xcframework — its symbols are already linked into\n# the main binary. Xcode incorrectly embeds it in Contents/Frameworks/ anyway,\n# which breaks code signing (codesign cannot re-sign a static archive bundle).\n# Remove it here, after the Embed Frameworks phase, before signing.\nFW=\"${CODESIGNING_FOLDER_PATH}/Contents/Frameworks/MeshLLMFFI.framework\"\nif [ -d \"$FW\" ]; then\n    echo \"Removing embedded static framework: $FW\"\n    rm -rf \"$FW\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -278,6 +274,37 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		ABCD1234ABCD1234ABCD1234 /* XCLocalSwiftPackageReference */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../mesh-llm-sdk;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		111122223333444455556666 /* MeshLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MeshLLM;
+			package = ABCD1234ABCD1234ABCD1234 /* XCLocalSwiftPackageReference */;
+		};
+		7777888899990000AAAABBBB /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Sparkle;
+			package = DCBA4321DCBA4321DCBA4321 /* XCRemoteSwiftPackageReference */;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXTargetDependency section */
 		A1B2C3D4E5F60007A1B2C3D4 /* PBXTargetDependency */ = {
@@ -401,6 +428,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				EXCLUDED_ARCHS = x86_64;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -419,6 +447,7 @@
 				DEVELOPMENT_TEAM = AUEPCDGA5G;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
@@ -428,7 +457,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.1";
+				MARKETING_VERSION = "0.1.0-alpha.2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.orbit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -456,7 +485,9 @@
 				DEVELOPMENT_TEAM = AUEPCDGA5G;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_ARCHS = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Orbit reads Mail to include emails in agent briefings. All processing happens locally.";
@@ -465,7 +496,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.1";
+				MARKETING_VERSION = "0.1.0-alpha.2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.orbit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -490,7 +521,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.1";
+				MARKETING_VERSION = "0.1.0-alpha.2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -510,7 +541,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.1";
+				MARKETING_VERSION = "0.1.0-alpha.2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -529,7 +560,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.1";
+				MARKETING_VERSION = "0.1.0-alpha.2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -548,7 +579,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
-				MARKETING_VERSION = "0.1.0-alpha.1";
+				MARKETING_VERSION = "0.1.0-alpha.2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.keranmckenzie.OrbitUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

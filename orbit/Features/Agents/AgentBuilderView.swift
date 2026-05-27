@@ -206,9 +206,12 @@ private struct AgentBuilderContent: View {
     }
 
     private var stepList: some View {
-        List {
-            ForEach(viewModel.sortedSteps, id: \.id) { step in
-                VStack(spacing: 0) {
+        ScrollView {
+            VStack(spacing: 0) {
+                // Silent drop zone before the first step
+                stepDropSlot(insertAt: 0)
+
+                ForEach(viewModel.sortedSteps, id: \.id) { step in
                     AgentStepCardView(
                         step: step,
                         stepNumber: step.order + 1,
@@ -216,47 +219,32 @@ private struct AgentBuilderContent: View {
                         onSelect: { viewModel.selectedStepID = step.id },
                         onDelete: { viewModel.removeStep(step) }
                     )
-                    if step.id != viewModel.sortedSteps.last?.id {
-                        stepConnector(after: step)
-                    }
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 0, leading: OSpacing.md, bottom: 0, trailing: OSpacing.md))
-            }
-            .onMove { viewModel.moveSteps(from: $0, to: $1) }
+                    .draggable(StepIDTransfer(id: step.id))
+                    .padding(.horizontal, OSpacing.md)
 
-            addStepRow
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: OSpacing.sm, leading: OSpacing.md, bottom: OSpacing.md, trailing: OSpacing.md))
+                    stepDropSlot(insertAt: step.order + 1)
+                }
+
+                addStepRow
+                    .padding(.horizontal, OSpacing.md)
+                    .padding(.top, OSpacing.xs)
+                    .padding(.bottom, OSpacing.md)
+            }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+        .background(Color.oBackground)
     }
 
-    private func stepConnector(after step: AgentStep) -> some View {
-        HStack {
-            Spacer()
-            VStack(spacing: 0) {
-                Rectangle().fill(Color.oDivider).frame(width: 1, height: 8)
-                Button {
-                    viewModel.addStep(.think, after: step)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.oTextTertiary)
-                        .frame(width: 20, height: 20)
-                        .background(Color.oSurface)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.oDivider, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Insert step after \(step.label)")
-                Rectangle().fill(Color.oDivider).frame(width: 1, height: 8)
-            }
-            Spacer()
-        }
+    /// Returns a drop slot for inserting at `insertAt`.
+    /// Shows a `+` connector button only between two existing steps.
+    private func stepDropSlot(insertAt: Int) -> some View {
+        let steps = viewModel.sortedSteps
+        let isBetween = insertAt > 0 && insertAt < steps.count
+        let prevStep: AgentStep? = isBetween ? steps.first(where: { $0.order == insertAt - 1 }) : nil
+        return StepDropSlot(
+            onDropStepType: { type in viewModel.insertStep(type: type, at: insertAt) },
+            onDropStepID: { id in viewModel.moveStep(id: id, toOrder: insertAt) },
+            onTapAdd: prevStep.map { step in { viewModel.addStep(.think, after: step) } }
+        )
     }
 
     private var addStepRow: some View {
@@ -287,27 +275,70 @@ private struct AgentBuilderContent: View {
             Text("Add your first step")
                 .font(.oBodyMedium)
                 .foregroundStyle(Color.oTextSecondary)
-            Text("Pick a step type from the left panel.")
+            Text("Pick a step type from the left, or drag it here.")
                 .font(.oCaption)
                 .foregroundStyle(Color.oTextTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .dropDestination(for: StepType.self) { items, _ in
+            guard let type = items.first else { return false }
+            viewModel.addStep(type)
+            return true
+        }
     }
 
     // MARK: - Config panel (right of builder)
 
     private var configPanel: some View {
-        Group {
-            if let step = viewModel.selectedStep {
-                AgentStepConfigPanel(
-                    step: step,
-                    previousSteps: viewModel.previousSteps(before: step),
-                    onChanged: { viewModel.markDirty() }
-                )
-            } else {
-                AgentStepConfigEmptyPanel()
+        VStack(spacing: 0) {
+            Group {
+                if let step = viewModel.selectedStep {
+                    AgentStepConfigPanel(
+                        step: step,
+                        previousSteps: viewModel.previousSteps(before: step),
+                        onChanged: { viewModel.markDirty() }
+                    )
+                } else {
+                    AgentStepConfigEmptyPanel()
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Divider()
+            runAgentFooter
         }
+    }
+
+    private var runAgentFooter: some View {
+        HStack {
+            Spacer()
+            Button {
+                viewModel.showTestRunSheet = true
+            } label: {
+                HStack(spacing: OSpacing.xxs) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 11))
+                    Text("Run Agent")
+                        .font(.oCaptionMed)
+                }
+                .foregroundStyle(runtimeReady ? Color.white : Color.oTextTertiary)
+                .padding(.horizontal, OSpacing.md)
+                .padding(.vertical, OSpacing.sm)
+                .background(runtimeReady ? Color.oAccent : Color.oSurface)
+                .clipShape(RoundedRectangle(cornerRadius: ORadius.md))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ORadius.md)
+                        .stroke(runtimeReady ? Color.clear : Color.oDivider)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!runtimeReady)
+            .help(runtimeReady ? "Run this agent" : "Start the AI runtime to run agents")
+            .accessibilityLabel(runtimeReady ? "Run agent" : "Run agent — AI not running")
+        }
+        .padding(OSpacing.md)
+        .background(Color.oSurface)
     }
 
     // MARK: - Settings tab
@@ -435,6 +466,67 @@ private struct AgentBuilderContent: View {
             .background(Color.oSurface)
             .clipShape(RoundedRectangle(cornerRadius: ORadius.md))
             .overlay(RoundedRectangle(cornerRadius: ORadius.md).stroke(Color.oDivider))
+        }
+    }
+}
+
+// MARK: - Drop slot (insert or reorder)
+
+private struct StepDropSlot: View {
+    let onDropStepType: (StepType) -> Void
+    let onDropStepID: (UUID) -> Void
+    let onTapAdd: (() -> Void)?
+
+    @State private var isTargetedType = false
+    @State private var isTargetedID   = false
+    private var isTargeted: Bool { isTargetedType || isTargetedID }
+
+    private var slotHeight: CGFloat { isTargeted || onTapAdd != nil ? 36 : 16 }
+
+    var body: some View {
+        ZStack {
+            if isTargeted {
+                RoundedRectangle(cornerRadius: ORadius.sm)
+                    .fill(Color.oAccentSoft)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ORadius.sm)
+                            .stroke(Color.oAccent.opacity(0.5), lineWidth: 1.5)
+                    )
+                    .padding(.horizontal, OSpacing.md)
+            } else if let tap = onTapAdd {
+                VStack(spacing: 0) {
+                    Rectangle().fill(Color.oDivider).frame(width: 1, height: 8)
+                    Button(action: tap) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.oTextTertiary)
+                            .frame(width: 20, height: 20)
+                            .background(Color.oSurface)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.oDivider, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Insert step here")
+                    Rectangle().fill(Color.oDivider).frame(width: 1, height: 8)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: slotHeight)
+        .contentShape(Rectangle())
+        .dropDestination(for: StepType.self) { items, _ in
+            guard let type = items.first else { return false }
+            onDropStepType(type)
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.12)) { isTargetedType = targeted }
+        }
+        .dropDestination(for: StepIDTransfer.self) { items, _ in
+            guard let item = items.first else { return false }
+            onDropStepID(item.id)
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.12)) { isTargetedID = targeted }
         }
     }
 }

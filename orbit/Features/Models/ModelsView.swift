@@ -28,8 +28,7 @@ struct ModelsView: View {
                     },
                     onRemove: {
                         Task {
-                            guard let bin = appState.runtimeManager.binaryPath else { return }
-                            await viewModel.removeModel(selected, binaryPath: bin, rm: appState.runtimeManager)
+                            await viewModel.removeModel(selected, rm: appState.runtimeManager)
                         }
                     },
                     onClose: { viewModel.clearSelection() }
@@ -43,8 +42,42 @@ struct ModelsView: View {
             ModelCatalogSheet(viewModel: viewModel)
                 .environment(appState)
         }
+        .alert(
+            "Model downloaded",
+            isPresented: Binding(
+                get: { viewModel.completedDownloadRef != nil },
+                set: { if !$0 { viewModel.dismissCompletedDownload() } }
+            )
+        ) {
+            Button("Use now") {
+                if let ref = viewModel.completedDownloadRef,
+                   let model = viewModel.installedModels.first(where: { ($0.ref ?? $0.name) == ref }) {
+                    Task { await viewModel.setActiveModel(model, rm: appState.runtimeManager) }
+                }
+                viewModel.dismissCompletedDownload()
+            }
+            Button("Later", role: .cancel) {
+                viewModel.dismissCompletedDownload()
+            }
+        } message: {
+            if let name = viewModel.completedDownloadName {
+                Text("\"\(name)\" is ready to use.")
+            } else {
+                Text("Your model is ready to use.")
+            }
+        }
         .task {
             await viewModel.loadInstalled(rm: appState.runtimeManager)
+        }
+        .onChange(of: appState.runtimeManager.status) { _, newStatus in
+            if case .ready = newStatus {
+                Task { await viewModel.loadInstalled(rm: appState.runtimeManager) }
+            }
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            if newTab == .mesh {
+                Task { await appState.runtimeManager.refreshMeshModels() }
+            }
         }
         .accessibilityIdentifier("models_view")
     }
@@ -175,8 +208,7 @@ struct ModelsView: View {
                             },
                             onRemove: {
                                 Task {
-                                    guard let bin = appState.runtimeManager.binaryPath else { return }
-                                    await viewModel.removeModel(model, binaryPath: bin, rm: appState.runtimeManager)
+                                    await viewModel.removeModel(model, rm: appState.runtimeManager)
                                 }
                             }
                         )
@@ -237,16 +269,44 @@ struct ModelsView: View {
 
         if !meshState.isConnected {
             meshDisconnectedState
-        } else if meshModels.isEmpty {
+        } else if appState.runtimeManager.isLoadingMeshModels {
             VStack(spacing: OSpacing.sm) {
                 ProgressView()
                 Text("Loading mesh models…")
                     .font(.oCaption)
                     .foregroundStyle(Color.oTextTertiary)
+                Button("Refresh") {
+                    Task { await appState.runtimeManager.refreshMeshModels() }
+                }
+                .buttonStyle(.plain)
+                .font(.oCaption)
+                .foregroundStyle(Color.oAccent)
+                .padding(.top, OSpacing.xs)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, OSpacing.xxl)
-            .task { await appState.runtimeManager.refreshMeshModels() }
+        } else if meshModels.isEmpty {
+            VStack(spacing: OSpacing.sm) {
+                Image(systemName: "square.stack.3d.up.slash")
+                    .font(.system(size: 32, weight: .thin))
+                    .foregroundStyle(Color.oTextTertiary)
+                Text("No models on this mesh")
+                    .font(.oBody)
+                    .foregroundStyle(Color.oTextSecondary)
+                Text("The connected mesh isn't serving any models right now.")
+                    .font(.oCaption)
+                    .foregroundStyle(Color.oTextTertiary)
+                    .multilineTextAlignment(.center)
+                Button("Retry") {
+                    Task { await appState.runtimeManager.refreshMeshModels() }
+                }
+                .buttonStyle(.plain)
+                .font(.oCaption)
+                .foregroundStyle(Color.oAccent)
+                .padding(.top, OSpacing.xs)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, OSpacing.xxl)
         } else {
             meshModelsList(meshModels: meshModels, isPublic: meshState.isPublic)
         }

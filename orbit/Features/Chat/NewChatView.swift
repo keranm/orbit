@@ -22,28 +22,11 @@ struct NewChatView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             chatHomeContent
-                .overlay(alignment: .center) {
-                    if appState.runtimeStatus == .starting {
-                        VStack(spacing: OSpacing.sm) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Starting your AI…")
-                                .font(.oCaption)
-                                .foregroundStyle(Color.oTextTertiary)
-                        }
-                        .padding(OSpacing.md)
-                        .background(Color.oSurface.opacity(0.9))
-                        .clipShape(RoundedRectangle(cornerRadius: ORadius.lg))
-                    }
-                }
 
             if !allChats.isEmpty {
                 Divider()
                 ChatHistoryPanel()
             }
-        }
-        .onAppear {
-            // Auto-start is handled by ensureRunning() in appShell.task.
         }
     }
 
@@ -92,19 +75,21 @@ struct NewChatView: View {
     }
 
     private var canSendNewChat: Bool {
-        appState.runtimeStatus == .ready
-        && appState.activeModelRef != nil
-        && !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let s = appState.runtimeStatus
+        guard s == .ready || s == .starting else { return false }
+        return !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func startNewChat() {
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let modelRef = appState.activeModelRef else { return }
+        guard !text.isEmpty else { return }
         composerText = ""
 
         appState.novaState = .listening
 
-        let chat = Chat(modelRef: modelRef)
+        // Use the live model ref if available; ChatViewModel will resolve it once
+        // the runtime finishes starting if it's still nil at this point.
+        let chat = Chat(modelRef: appState.activeModelRef ?? "")
         let capped = String(text.prefix(42))
         chat.title = capped.count < text.count ? "\(capped)…" : capped
 

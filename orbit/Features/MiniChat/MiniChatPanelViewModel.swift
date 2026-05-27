@@ -51,8 +51,8 @@ final class MiniChatPanelViewModel {
 
     // MARK: - Init
 
-    init(service: (any ChatServiceProtocol)? = nil, apiPort: Int = 9337) {
-        self.service = service ?? ChatService(apiPort: apiPort)
+    init(service: (any ChatServiceProtocol)? = nil) {
+        self.service = service ?? ChatService()
     }
 
     // MARK: - Configure

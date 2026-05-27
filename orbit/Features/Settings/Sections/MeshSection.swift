@@ -19,7 +19,7 @@ struct MeshSection: View {
     @State private var joinError: String?
     @State private var isJoining = false
 
-    private var rm: RuntimeManager { appState.runtimeManager }
+    private var rm: RuntimeAdapter { appState.runtimeManager }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -503,22 +503,17 @@ struct MeshSection: View {
 
     private func joinPublic(_ mesh: DiscoveredMesh) async {
         joinError = nil
-        // Persist consent acknowledgement
         UserDefaults.standard.set(true, forKey: "publicMeshConsentAcknowledged")
-        await rm.joinPublicMesh(inviteToken: mesh.inviteToken)
+        await rm.joinPublicMesh(inviteToken: mesh.inviteToken, seedModelNames: mesh.modelNames)
     }
 
     private func startDiscovery() {
-        guard let bin = rm.binaryPath else {
-            discoverError = "Orbit isn't set up yet. Complete setup first."
-            return
-        }
         isDiscovering = true
         discoverError = nil
         discoveredMeshes = []
         Task {
             do {
-                let results = try await MeshDiscoveryService.shared.discoverPublicMeshes(binaryPath: bin)
+                let results = try await rm.discoverPublicMeshes()
                 discoveredMeshes = results
                 if results.isEmpty {
                     discoverError = "Orbit couldn't find shared meshes right now. You can try again later."

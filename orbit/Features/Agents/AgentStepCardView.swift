@@ -106,11 +106,14 @@ struct AgentStepCardView: View {
             }
             return "No feeds configured"
         case .think:
-            if let cfg = step.decodedConfig(ThinkStepConfig.self), !cfg.systemPrompt.isEmpty {
-                let prefix = cfg.systemPrompt.prefix(40)
-                return String(prefix) + (cfg.systemPrompt.count > 40 ? "…" : "")
+            if let cfg = step.decodedConfig(ThinkStepConfig.self) {
+                if !cfg.systemPrompt.isEmpty {
+                    let prefix = cfg.systemPrompt.prefix(40)
+                    return String(prefix) + (cfg.systemPrompt.count > 40 ? "…" : "")
+                }
+                return "Use \(cfg.modelRef.isEmpty ? "active model" : cfg.modelRef)"
             }
-            return "Use \(step.decodedConfig(ThinkStepConfig.self)?.modelRef.isEmpty == false ? step.decodedConfig(ThinkStepConfig.self)!.modelRef : "active model")"
+            return "Use active model"
         default:
             return step.stepType.subtitle
         }

@@ -133,7 +133,7 @@ struct ResetSection: View {
         if let ver = appState.runtimeManager.installedVersion {
             lines.append("mesh-llm: v\(ver)")
         }
-        lines.append("Binary: \(appState.runtimeManager.binaryPath?.path ?? "not found")")
+        lines.append("Binary: N/A (MeshLLM SDK)")
         lines.append("Models: \(appState.runtimeManager.installedModels.count) installed")
         lines.append("Status: \(String(describing: appState.runtimeStatus))")
         NSPasteboard.general.clearContents()
@@ -189,7 +189,7 @@ private struct RemoveMeshLLMSheet: View {
     private enum Phase {
         case confirm
         case removing
-        case done(ModelService.UninstallResult)
+        case done
         case failed(String)
 
         var isConfirm: Bool { if case .confirm = self { return true }; return false }
@@ -233,8 +233,8 @@ private struct RemoveMeshLLMSheet: View {
                         confirmContent
                     case .removing:
                         removingContent
-                    case .done(let result):
-                        doneContent(result)
+                    case .done:
+                        doneContent()
                     case .failed(let msg):
                         failedContent(msg)
                     }
@@ -374,7 +374,7 @@ private struct RemoveMeshLLMSheet: View {
 
     // MARK: - Done phase
 
-    private func doneContent(_ result: ModelService.UninstallResult) -> some View {
+    private func doneContent() -> some View {
         VStack(alignment: .leading, spacing: OSpacing.lg) {
             HStack(spacing: OSpacing.md) {
                 Image(systemName: "checkmark.circle.fill")
@@ -384,42 +384,9 @@ private struct RemoveMeshLLMSheet: View {
                     Text("Removal complete")
                         .font(.oBodyMedium)
                         .foregroundStyle(Color.oTextPrimary)
-                    Text("Mesh-LLM has been removed from your Mac.")
+                    Text("Mesh-LLM runtime has been reset.")
                         .font(.oCaption)
                         .foregroundStyle(Color.oTextSecondary)
-                }
-            }
-
-            if !result.summaryLines.isEmpty {
-                VStack(alignment: .leading, spacing: OSpacing.xs) {
-                    ForEach(result.summaryLines, id: \.self) { line in
-                        HStack(spacing: OSpacing.xs) {
-                            Circle()
-                                .fill(Color.oSuccessGreen)
-                                .frame(width: 5, height: 5)
-                            Text(line)
-                                .font(.oCaption)
-                                .foregroundStyle(Color.oTextSecondary)
-                        }
-                    }
-                }
-                .padding(OSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: ORadius.md)
-                        .fill(Color.oSurfaceSecondary)
-                )
-            }
-
-            if result.hasErrors {
-                VStack(alignment: .leading, spacing: OSpacing.xs) {
-                    Text("Some items could not be removed:")
-                        .font(.oCaptionMed)
-                        .foregroundStyle(Color.oWarningAmber)
-                    ForEach(result.errors, id: \.self) { err in
-                        Text("· \(err)")
-                            .font(.oCaption)
-                            .foregroundStyle(Color.oTextSecondary)
-                    }
                 }
             }
 
@@ -513,24 +480,19 @@ private struct RemoveMeshLLMSheet: View {
         guard canRemove else { return }
         phase = .removing
 
-        // Capture @MainActor values before entering the detached task.
-        let binaryURL = appState.runtimeManager.binaryPath
-
         Task {
-            let result = await ModelService.uninstallAll(
-                binaryPath: binaryURL,
-                rm: appState.runtimeManager
-            )
-
-            await appState.runtimeManager.detectInstall()
+            try? await appState.runtimeManager.stop()
+            appState.runtimeManager.clearInstalledModels()
+            appState.runtimeManager.installedVersion = nil
 
             UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
 
             withAnimation {
-                phase = .done(result)
+                phase = .done
             }
         }
     }
+
 }
 
 // MARK: - Full-row destructive button with hover
