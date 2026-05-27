@@ -44,10 +44,15 @@ final class RuntimeAdapter {
         return meshModels.first { $0.name == ref }
     }
 
-    // MARK: - Node
+    // MARK: - Node / Mesh client
 
     private(set) var node: Node?
     private var nodeTask: Task<Void, Never>?
+
+    /// Separate Client handle used for mesh inference.
+    /// Node.inference.chat() requires a configured API base URL for remote peer
+    /// routing; Client.inference.chat() (MeshClientHandle) handles this correctly.
+    private(set) var meshClient: Client?
 
     // MARK: - Init
 
@@ -233,6 +238,13 @@ final class RuntimeAdapter {
             try await newNode.start()
             try await node?.stop()
             node = newNode
+
+            // Client for consuming mesh inference — Node.inference.chat() requires
+            // a configured API base URL for remote peer routing; Client handles it.
+            let client = try Client(inviteToken: newToken, ownerKeypairBytesHex: keypair)
+            try await client.start()
+            meshClient = client
+
             meshConnectionState = .connectedPrivate(peerCount: 0)
             Task { await refreshMeshModels() }
         } catch {
@@ -253,6 +265,13 @@ final class RuntimeAdapter {
             )
             try await node?.stop()
             node = newNode
+
+            let client = try await Client.connectPublic(
+                ownerKeypairBytesHex: generateOwnerKeypairHex(),
+                query: query
+            )
+            meshClient = client
+
             meshConnectionState = .connectedPublic(peerCount: 0)
 
             // Pre-populate from discovery data so Models tab shows something immediately,
@@ -275,6 +294,8 @@ final class RuntimeAdapter {
     }
 
     func leaveMesh() async {
+        await meshClient?.stop()
+        meshClient = nil
         await stop()
         status = .noModelConfigured
         meshConnectionState = .disconnected
